@@ -49,7 +49,7 @@ final_res(index)=final_res(index)+gen_solar;
 
 % output
 R = georasterref('RasterSize', size(final_res), 'LatitudeLimits', [-90 90], 'LongitudeLimits', [-180 180],'ColumnsStartFrom','north');
-filename = 'Wind_Solar_AnnualPotential_025.tif';
+filename = 'Wind_Solar_AnnualPotential_025_reRun.tif';
 geotiffwrite(filename, final_res, R);
 
 
