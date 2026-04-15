@@ -38,15 +38,18 @@
 - Global_Load_22region.mat：不同区域的预测负荷曲线
 - Global_Grid_Division.tif：指示每个网格所属的区域电网
 - Global_Init_State.mat：当前太阳能、风能、储能与输电容量
+
 - OptFun_SG_Dispatch_2050.m：2050 年代全球互联情景下的电力调度分析代码
 - nonlcon2050.m：2050 年代全球互联情景下的非线性约束函数
 - NonlConData.mat：2050 年代全球互联情景下的非线性约束矩阵
 - Global_Trans.mat：可能的跨区域输电路径及相应的损耗矩阵
+
 - Optimization_SC_2040.m：2040 年洲际互联情景下获取最优空间布局的代码
 - Opt_SG_2050_Sel.mat：2040 年布局优化的约束矩阵
 - OptFun_SC_Dispatch_2040.m：2040 年代全球互联情景下的电力调度分析代码
 - nonlcon2040.m：2040 年代全球互联情景下的非线性约束函数
 - NonlConData2040.mat：2040 年代全球互联情景下的非线性约束矩阵
+
 - Optimization_SA_2030.m：2030 年洲际互联情景下获取最优空间布局的代码
 - Opt_SC_2040_Sel.mat：2030 年布局优化的约束矩阵
 - OptFun_SA_Dispatch_2030.m：2030 年代全球互联情景下的电力调度分析代码
