@@ -8,7 +8,7 @@ Data/CMIP6/*
 Data/CMIP6_bcsd/*
 Data/position/*
 Data/processed/*
-
+output/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
