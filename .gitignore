@@ -1,4 +1,5 @@
 # Custom
+.claude
 *.zip
 *.tif
 *.mat
