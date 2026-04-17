@@ -31,9 +31,9 @@ def find_all_paths_from_start(
 
     返回：
         paths: 路径列表，每个路径为 1D int 数组（0-based 节点索引）
-        costs: 1D float 数组，每条路径的累积加性损耗
+        costs: 1D float 数组，每条路径的端到端损耗（乘积累积：`1 - Π(1 - cᵢ)`）
 
-    路径损耗计算方式：cost = sum(edge_costs[path[j], path[j+1]])
+    路径损耗计算方式：cost = 1 - Π(1 - edge_costs[path[j], path[j+1]])
     """
     n = adjacency.shape[0]
     paths = []
@@ -58,7 +58,7 @@ def find_all_paths_from_start(
             if neighbor in path:
                 continue
 
-            new_cost = cost + edge_costs[current, neighbor]
+            new_cost = 1 - (1 - cost) * (1 - edge_costs[current, neighbor])
             new_path = path + [neighbor]
 
             # 路径长度 >= min_nodes 时记录
