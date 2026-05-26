@@ -641,3 +641,89 @@ ERA5气象数据 (小时级, 2000-2022)
 - **时间分辨率**：8760小时/年（逐时调度）
 - **格网分辨率**：1°×1°（评估），0.25°×0.25°（潜力输出）
 - **全球区域划分**：20个区域（6大洲细分为20个子区域）
+
+---
+
+## 六、GeoTIFF 读取方案（无 Mapping Toolbox 环境适配）
+
+### 6.1 问题背景
+
+本项目的 Optimization、Benefits、Resilience 模块共 **11 个 MATLAB 脚本** 依赖 `geotiffread` 和 `readgeoraster` 读取 GeoTIFF 栅格数据，这两个函数属于 MATLAB Mapping Toolbox。在未安装该工具箱的环境中无法运行。
+
+### 6.2 解决方案：纯 MATLAB 读取 + Python 预转换加速
+
+采用**方案 2（纯 MATLAB）为主、方案 1（Python 预转换）为加速手段**的组合方案。通过 wrapper 函数屏蔽底层实现差异，**所有 11 个 MATLAB 脚本无需任何修改即可直接运行**。
+
+#### 架构设计
+
+```
+MATLAB 脚本（零改动）
+    │ 调用 geotiffread('xxx.tif') 或 readgeoraster('xxx.tif')
+    ▼
+wrapper 函数（自动选择最快路径）
+    ├─ 存在 xxx.mat ？ → 直接 load（最快，Python 预转换生成）
+    └─ 不存在？         → 调用 readtif_custom 直接读取 .tif（无任何依赖）
+```
+
+#### 文件清单
+
+| 文件 | 类型 | 作用 |
+|------|------|------|
+| `readtif_custom.m` | MATLAB 函数 | 纯 MATLAB TIFF 解析器，无任何工具箱依赖 |
+| `geotiffread.m` | MATLAB 函数 | Drop-in wrapper，替代 Mapping Toolbox 的 geotiffread |
+| `readgeoraster.m` | MATLAB 函数 | Drop-in wrapper，替代 Mapping Toolbox 的 readgeoraster |
+| `convert_tif_to_mat.py` | Python 脚本 | 批量将 .tif 转为 .mat（可选，用于加速加载） |
+| `test_readtif.m` | MATLAB 脚本 | 验证 readtif_custom 输出与 rasterio 是否一致 |
+| `validate_readtif.py` | Python 脚本 | 生成参考数据并验证 PackBits 解压正确性 |
+
+> 以上文件均位于 `Optimization/` 目录。
+
+#### 使用方式
+
+**方式 A：纯 MATLAB（推荐，零依赖）**
+
+将 `readtif_custom.m`、`geotiffread.m`、`readgeoraster.m` 放到 MATLAB 工作目录（如 `Optimization/`），即可直接运行所有脚本。MATLAB 会优先调用当前目录下的 wrapper 函数，而非 Mapping Toolbox 的版本。
+
+**方式 B：Python 预转换加速（可选）**
+
+如果希望加快数据加载速度（避免每次运行时解析 TIFF 二进制格式），可运行：
+
+```bash
+/data4/yanxiaokai/.conda/envs/climate/bin/python3 convert_tif_to_mat.py
+```
+
+这会为每个 `.tif` 文件生成同名 `.mat` 文件（如 `Global_LandMask.tif` → `Global_LandMask.mat`）。wrapper 函数会自动检测并优先加载 `.mat` 文件。
+
+**注意**：更新 `.tif` 文件后需重新运行转换脚本，否则 `.mat` 中的数据会与 `.tif` 不同步。如不运行转换，wrapper 会自动 fallback 到 `readtif_custom` 直接读取 `.tif`。
+
+### 6.3 readtif_custom 技术细节
+
+`readtif_custom.m` 是一个 250 行的纯 MATLAB 函数，手动解析 TIFF 二进制格式：
+
+| 特性 | 支持情况 |
+|------|---------|
+| TIFF header / IFD 解析 | 支持（小端/大端） |
+| Tiled / Striped 存储 | 均支持 |
+| PackBits 压缩（code 32773） | 支持 |
+| 无压缩（code 1） | 支持 |
+| 数据类型 | uint8, uint16, uint32, int16, int32, float32, float64 |
+| LZW / Deflate / JPEG 压缩 | 不支持（本项目不需要） |
+| BigTIFF（>4 GB） | 不支持（本项目不需要） |
+| 多波段栅格 | 不支持（本项目不需要） |
+| 空间参考对象 R | 返回空 struct（本项目所有脚本均不使用 R） |
+
+### 6.4 验证结果
+
+- Python 侧：使用完全等价的 TIFF 解析 + PackBits 解压逻辑对比 rasterio，**7 个 TIF 文件全部像素级一致**
+- MATLAB 侧：`test_readtif.m` 加载 `ref_tif_data.mat`（rasterio 参考数据），与 `readtif_custom` 输出逐像素对比
+
+### 6.5 方案选择理由
+
+| 对比维度 | 方案 1（Python 转换 .mat） | 方案 2（纯 MATLAB 读 .tif） | 本方案（2+1 加速） |
+|----------|--------------------------|---------------------------|-------------------|
+| MATLAB 代码改动 | 中（需修改加载逻辑） | 零 | 零 |
+| 外部依赖 | Python + rasterio | 无 | 无（Python 可选） |
+| 数据正确性 | rasterio 保证 | 已验证一致 | 已验证一致 |
+| 维护成本 | 需同步更新 .mat | 零 | 低（可选加速） |
+| TIF/.mat 同步风险 | 有 | 无 | 有但可 fallback |
+| 加载速度 | 快（.mat 直接加载） | 较慢（解析 TIFF） | 两者兼顾 |
