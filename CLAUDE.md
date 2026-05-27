@@ -26,6 +26,7 @@ The optimization is top-down nested: 2050 global (S-G) results constrain 2040 co
   - 如果需要安装包，可以使用 `uv pip install <package-name>` 来安装到虚拟环境中, 并写入 `requirements.txt`。
 - **MATLAB** (R2024b, no Mapping Toolbox): Annual potential calculation, spatial optimization (`gamultiobj`/NSGA-II), resilience analysis.
   - MATLAB 可用，直接运行 `.m` 文件即可。命令行使用 `matlab -batch "script_name"` 执行(需要先进入 `.m` 文件所在目录)。
+  - 注意，请使用 '/data6/yanxiaokai/MATLAB/R2024b/bin/matlab'
 - **R**: Chord diagrams (`circlize`), polar charts (`ggplot2`) in Benefits/. 
   - R 语言在这不可用，需要重写 R 代码为 Python 代码（如使用 `matplotlib`、`seaborn`、`plotly` 等库）。
 
