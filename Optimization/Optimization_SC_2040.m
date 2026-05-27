@@ -1,4 +1,18 @@
 clear,clc
+
+% Start parallel pool for gamultiobj acceleration
+try
+    pool = parpool('local');
+    fprintf('Parallel pool started: %d workers\n', pool.NumWorkers);
+catch ME
+    if contains(ME.identifier, 'parallel:pool:alreadyopen')
+        pool = gcp('nocreate');
+        fprintf('Parallel pool already running: %d workers\n', pool.NumWorkers);
+    else
+        warning('Failed to start parallel pool: %s', ME.message);
+    end
+end
+
 load Opt_SG_2050_Sel opt_trans opt_stoCap opt_stoPow opt_wind opt_solar
 %wind generation curves
 luccs=geotiffread('Global_Wind_Net_Area_Add_Egrid.tif');
@@ -114,7 +128,7 @@ intcon=1:1:length(lb);
 % scale=rand(nvars,1);
 T = datetime('now');
 disp(T)
-options = optimoptions('gamultiobj','PlotFcn',@gaplotpareto);
+options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[]);
 [res_scale,prs]=gamultiobj(@(scale)  OptFun_SC_Dispatch_2040(all_ins,all_gens,all_loads,CGrid_Index,scale),...
     nvars,[],[],[],[],lb,ub,@nonlcon2040,intcon,options);
 % [res_scale,prs]=gamultiobj(@(scale)  OptFun_SG_Dispatch(all_ins,all_gens,all_loads,CGrid_Index,scale),...
@@ -125,6 +139,13 @@ h5create('Optimization_SC_2040_Res.h5','/res_scale',size(res_scale));
 h5write('Optimization_SC_2040_Res.h5','/res_scale',res_scale);
 h5create('Optimization_SC_2040_Res.h5','/prs',size(prs));
 h5write('Optimization_SC_2040_Res.h5','/prs',prs);
+
+% Shutdown parallel pool
+pool = gcp('nocreate');
+if ~isempty(pool)
+    delete(pool);
+    fprintf('Parallel pool shut down.\n');
+end
 
 
 
