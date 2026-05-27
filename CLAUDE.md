@@ -24,7 +24,6 @@ The optimization is top-down nested: 2050 global (S-G) results constrain 2040 co
 - **Python** (in `.venv/`): Solar CF simulation (`gsee`), wind CF simulation (`windpowerlib`), data processing.
   - python 需要在当前目录下执行 `source .venv/bin/activate` 来激活虚拟环境。
   - 如果需要安装包，可以使用 `uv pip install <package-name>` 来安装到虚拟环境中, 并写入 `requirements.txt`。
-  - 所有 python 重写的代码，输出的文件都添加一个 `reRun` 后缀，以区分原始 MATLAB/R 代码输出的文件。例如 `Wind_Solar_AnnualPotential_025_reRun.tif`
 - **MATLAB** (R2024b, no Mapping Toolbox): Annual potential calculation, spatial optimization (`gamultiobj`/NSGA-II), resilience analysis.
   - MATLAB 可用，直接运行 `.m` 文件即可。命令行使用 `matlab -batch "script_name"` 执行(需要先进入 `.m` 文件所在目录)。
 - **R**: Chord diagrams (`circlize`), polar charts (`ggplot2`) in Benefits/. 
