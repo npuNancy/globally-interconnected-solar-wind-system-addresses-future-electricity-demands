@@ -117,6 +117,8 @@ al=max(all_loads,[],2);% Unit TW
 lb(nvars+1:nvars+20)=cur_storage/1000;ub(nvars+1:nvars+20)=al*1000;%storage power (GW)
 clear cur_storage al
 lb(nvars+21:nvars+40)=2;ub(nvars+21:nvars+40)=72;%storage duration (hours)
+cur_trans(6,1)=0;cur_trans(7,1)=0;cur_trans(1,6)=0;cur_trans(1,7)=0;
+cur_trans(17,4)=0;cur_trans(18,4)=0;cur_trans(4,17)=0;cur_trans(4,18)=0;
 tmp=cur_trans>0;cur_trans(cur_trans<2)=0;
 lb(nvars+41:nvars+40+sum(tmp(:)))=cur_trans(tmp)/1000;ub(nvars+41:nvars+40+sum(tmp(:)))=10*1000;% Transmission power (GW)
 clear cur_trans

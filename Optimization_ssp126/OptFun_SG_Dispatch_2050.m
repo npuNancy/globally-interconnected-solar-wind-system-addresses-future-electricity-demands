@@ -18,7 +18,7 @@ toStorageLoss=0.95;%efficiency to store energy
 fromStorageLoss=0.95;%efficiecy to use stored energy
 load Global_Trans trans_connections trans_loss
 %trans_connections (Interconnections.xlsx AdjacencyMatrix)
-trans_connections(trans_connections>0)=1;
+trans_connections(trans_connections==2)=0;
 %trans_loss efficiency of transferring energy (Interconnections.xlsx CostMatrix_Per)
 storagePow=scale(length(CGrid_Index)+1:length(CGrid_Index)+20)/1000; %storage power TW
 storageCap=storagePow.*scale(length(CGrid_Index)+21:length(CGrid_Index)+40); %storage capacity
@@ -39,7 +39,7 @@ all_costs=[];
 for gg_ind=1:20
     startNode = gg_ind;  % start node
     minNodes = 2;   % min nodes
-    maxNodes = 6;   % max nodes
+    maxNodes = 3;   % max nodes
     trans_conn=int16(trans_power>0);
     [tmp_paths, tmp_costs] = findAllPathsFromStart(trans_conn, trans_loss,startNode, minNodes, maxNodes);
     % for i = 1:length(g_paths)
