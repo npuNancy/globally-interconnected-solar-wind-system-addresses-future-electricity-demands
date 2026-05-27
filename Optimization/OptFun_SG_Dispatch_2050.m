@@ -57,7 +57,7 @@ clear tmp_paths tmp_costs
 
 % time_ind=time_ind+1;
 for time_ind=1:8760
-    time_ind
+    % time_ind
     %Recover transmission capacity
     trans_power=zeros(20,20);
     trans_power(trans_connections==1)=scale(length(CGrid_Index)+41:end)/1000; %transmission power TW
@@ -83,7 +83,7 @@ for time_ind=1:8760
         g_paths=all_paths{gg_ind};
         %ad_grid_ind=ad_grid_ind+1
         for ad_grid_ind=1:length(g_paths)
-            g_route=g_paths{ad_grid_ind};%g_route(end)   
+            g_route=g_paths{ad_grid_ind};%g_route(end)
             if d_g_s(g_route(end),3)>=0
                 continue
             end
@@ -121,7 +121,7 @@ for time_ind=1:8760
             flexible_ele(time_ind,gg_ind)=abs(d_g_s(gg_ind,3)+t_amount);
             d_g_s(gg_ind,3)=0;
         end
-    end    
+    end
 end
 
 %total costs
@@ -154,5 +154,5 @@ obj_cost=obj_cost+350*sum(storageCap(:));%Storage (USD billion)
 f(1)=sum(curtailed_ele(:))./sum(grid_gens(:));%cr;
 f(2)=sum(flexible_ele(:))./sum(loads(:));%1-pr
 f(3)=obj_cost;%cost
-% f(3) = abs(sum(scale(1:length(CGrid_Index))) - 0.35 * length(CGrid_Index))/length(CGrid_Index);    
+% f(3) = abs(sum(scale(1:length(CGrid_Index))) - 0.35 * length(CGrid_Index))/length(CGrid_Index);
 end
