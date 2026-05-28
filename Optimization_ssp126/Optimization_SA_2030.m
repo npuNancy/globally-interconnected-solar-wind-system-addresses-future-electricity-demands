@@ -146,9 +146,9 @@ intcon=1:1:length(lb);
 %% ======================== 9. 运行 NSGA-II 优化 ========================
 T = datetime('now');
 disp(T)
-fprintf('开始2030年优化（邻近互联，种群=500，代数=100，约束容差=5）...\n');
-% ConstraintTolerance=5：允许风电约束违反≤5个区域
-options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',500,'MaxGenerations',100,'ConstraintTolerance',5);
+fprintf('开始2030年优化（邻近互联，种群=1000，代数=200，约束容差=8）...\n');
+% ConstraintTolerance=8：允许风电约束违反≤8个区域
+options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',1000,'MaxGenerations',200,'ConstraintTolerance',8);
 [res_scale,prs]=gamultiobj(@(scale)  OptFun_SA_Dispatch_2030(all_ins,all_gens,all_loads,CGrid_Index,scale),...
     nvars,[],[],[],[],lb,ub,@nonlcon2030,intcon,options);
 T = datetime('now');

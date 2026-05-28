@@ -11,6 +11,10 @@ Data/position/*
 Data/processed/*
 output/*
 data
+results/*
+Optimization_ssp126/results/
+Optimization_ssp245/results/
+Optimization_ssp560/results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
