@@ -169,8 +169,8 @@ intcon=1:1:length(lb);  % 所有变量均为整数约束
 %% ======================== 8. 运行 NSGA-II 优化 ========================
 T = datetime('now');
 disp(T)
-fprintf('开始2050年优化（大陆互联，种群=500，代数=100）...\n');
-options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',500,'MaxGenerations',100);
+fprintf('开始2050年优化（大陆互联，种群=1000，代数=200）...\n');
+options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',1000,'MaxGenerations',200);
 [res_scale,prs]=gamultiobj(@(scale)  OptFun_SC_Dispatch_2050(all_ins,all_gens,all_loads,CGrid_Index,scale),...
     nvars,[],[],[],[],lb,ub,@nonlcon2050,intcon,options);
 T = datetime('now');
