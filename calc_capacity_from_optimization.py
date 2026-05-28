@@ -258,7 +258,7 @@ def print_regional_breakdown(result: dict, top_n: int = 5):
 
 def main():
     parser = argparse.ArgumentParser(description="从优化结果计算风电/光伏装机容量")
-    parser.add_argument("--source", choices=["optimization", "ssp126"], default="optimization",
+    parser.add_argument("--source", choices=["optimization", "ssp126", "ssp245", "ssp560"], default="optimization",
                         help="使用哪个优化目录（默认：optimization）")
     parser.add_argument("--res-dir", type=str, default=None,
                         help="自定义 .h5 结果文件目录（默认：Resilience/）")
@@ -268,10 +268,13 @@ def main():
 
     base_dir = Path(__file__).parent
 
-    if args.source == "optimization":
-        opt_dir = base_dir / "Optimization"
-    else:
-        opt_dir = base_dir / "Optimization_ssp126"
+    source_dir_map = {
+        "optimization": "Optimization",
+        "ssp126": "Optimization_ssp126",
+        "ssp245": "Optimization_ssp245",
+        "ssp560": "Optimization_ssp560",
+    }
+    opt_dir = base_dir / source_dir_map[args.source]
 
     res_dir = Path(args.res_dir) if args.res_dir else base_dir / "Resilience"
 
