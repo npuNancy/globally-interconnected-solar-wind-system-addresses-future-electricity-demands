@@ -25,6 +25,6 @@ for i=1:20
     tmp_wind=[tmp_wind;sum(tmp_c2(index))];
 end
 tmp_e2=tmp_wind<cur_wind;
-c(2)=sum(tmp_e2)
+c(2)=sum(tmp_e2);
 ceq=[];
 end

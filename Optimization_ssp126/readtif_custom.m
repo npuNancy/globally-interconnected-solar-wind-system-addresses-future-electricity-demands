@@ -1,51 +1,51 @@
 function data = readtif_custom(filepath)
-% READTIF_CUSTOM  Read GeoTIFF raster data without any toolbox dependency.
-%   DATA = READTIF_CUSTOM(FILEPATH) reads a single-band TIFF file and
-%   returns the raster data as a 2-D matrix (rows x cols), matching the
-%   output of geotiffread / readgeoraster for data values.
+% READTIF_CUSTOM — 纯 MATLAB GeoTIFF 读取器（无工具箱依赖）
 %
-%   Supported:
-%     - Uncompressed and PackBits-compressed TIFFs
-%     - Tiled and stripped storage
-%     - uint8, uint16, uint32, int16, int32, float32, float64
-%     - Little-endian and big-endian byte order
+% 用法：DATA = READTIF_CUSTOM(FILEPATH)
+%   读取单波段 TIFF 文件，返回二维栅格数据矩阵（行×列）。
 %
-%   NOT supported (not needed by current codebase):
-%     - LZW / Deflate / JPEG / SGILog compression
-%     - Multi-band rasters
-%     - BigTIFF (>4 GB)
+% 支持：
+%   - 无压缩和 PackBits 压缩的 TIFF
+%   - 分块（tiled）和条带（stripped）存储方式
+%   - 数据类型：uint8, uint16, uint32, int16, int32, float32, float64
+%   - 小端和大端字节序
 %
-%   Example:
-%     landmask = readtif_custom('Global_LandMask.tif');
+% 不支持（本项目不需要）：
+%   - LZW / Deflate / JPEG / SGILog 压缩
+%   - 多波段栅格
+%   - BigTIFF（>4 GB）
+%
+% 示例：
+%   landmask = readtif_custom('Global_LandMask.tif');
 
     [fid, msg] = fopen(filepath, 'r', 'ieee-le');
     if fid == -1
-        error('readtif_custom:fileOpen', 'Cannot open file: %s', msg);
+        error('readtif_custom:fileOpen', '无法打开文件：%s', msg);
     end
     cleanup = onCleanup(@() fclose(fid));
 
-    %--- Read TIFF header (8 bytes) ----------------------------------------
+    %--- 读取 TIFF 文件头（8字节） ---
     bo_raw = fread(fid, 2, 'uint8=>uint8');
-    if isequal(bo_raw', [73 73])          % 'II'
+    if isequal(bo_raw', [73 73])          % 'II' = 小端
         le = true;
-    elseif isequal(bo_raw', [77 77])     % 'MM'
+    elseif isequal(bo_raw', [77 77])     % 'MM' = 大端
         le = false;
     else
-        error('readtif_custom:format', 'Not a valid TIFF file (bad byte order).');
+        error('readtif_custom:format', '不是有效的 TIFF 文件（字节序错误）');
     end
 
     magic = ru16(fid, le);
     if magic ~= 42
-        error('readtif_custom:format', 'Not a standard TIFF (magic=%d).', magic);
+        error('readtif_custom:format', '非标准 TIFF（magic=%d）', magic);
     end
 
     ifd_offset = ru32(fid, le);
 
-    %--- Parse IFD entries -------------------------------------------------
+    %--- 解析 IFD 目录条目 ---
     fseek(fid, ifd_offset, 'bof');
     num_entries = ru16(fid, le);
 
-    % Tag constants
+    % TIFF 标签常量
     IMG_W=256; IMG_H=257; BPS=258; COMP=259; SF=339;
     STRIP_OFF=273; STRIP_CNT=279; ROWS_PER_STRIP=278;
     TILE_W=322; TILE_H=323; TILE_OFF=324; TILE_CNT=325;
@@ -60,7 +60,7 @@ function data = readtif_custom(filepath)
         tag  = ru16(fid, le);
         dt   = ru16(fid, le);
         cnt  = ru32(fid, le);
-        vraw = fread(fid, 4, 'uint8=>uint8');  % raw 4-byte value/offset field
+        vraw = fread(fid, 4, 'uint8=>uint8');  % 4字节值/偏移字段
 
         switch tag
             case IMG_W,  img_w  = val_scalar(vraw, dt, le);
@@ -84,27 +84,27 @@ function data = readtif_custom(filepath)
         end
     end
 
-    % Validate required fields
+    % 校验必要字段
     if img_w==0 || img_h==0
-        error('readtif_custom:format', 'Missing ImageWidth/ImageLength tags.');
+        error('readtif_custom:format', '缺少 ImageWidth/ImageLength 标签');
     end
 
-    %--- Default tile/strip geometry ---------------------------------------
+    %--- 计算分块/条带几何 ---
     if ~is_tiled
         tw = img_w;
         if rows_per_strip == 0, rows_per_strip = img_h; end
         th = rows_per_strip;
     end
 
-    tiles_across  = ceil(img_w / tw);
-    tiles_down    = ceil(img_h / th);
+    tiles_across  = ceil(img_w / tw);  % 水平方向块数
+    tiles_down    = ceil(img_h / th);  % 垂直方向块数
     n_tiles       = tiles_across * tiles_down;
 
-    %--- Read offset and byte-count arrays ---------------------------------
+    %--- 读取偏移和字节数数组 ---
     offsets     = read_tag_array(fid, off_val, off_dt, off_cnt, n_tiles, le);
     byte_counts = read_tag_array(fid, cnt_val, cnt_dt, cnt_cnt, n_tiles, le);
 
-    %--- Determine MATLAB read precision -----------------------------------
+    %--- 确定 MATLAB 读取精度 ---
     switch bps
         case 8,  read_prec = 'uint8';
         case 16, read_prec = 'uint16';
@@ -112,10 +112,10 @@ function data = readtif_custom(filepath)
             if sf == 3, read_prec = 'single'; else, read_prec = 'uint32'; end
         case 64, read_prec = 'double';
         otherwise
-            error('readtif_custom:bps', 'Unsupported BitsPerSample: %d', bps);
+            error('readtif_custom:bps', '不支持的位深度：%d', bps);
     end
 
-    %--- Read and assemble tiles/strips ------------------------------------
+    %--- 逐块读取并拼装图像 ---
     img = zeros(img_h, img_w, read_prec);
 
     for t = 1:n_tiles
@@ -123,22 +123,22 @@ function data = readtif_custom(filepath)
         fseek(fid, offsets(t), 'bof');
         raw_bytes = fread(fid, byte_counts(t), 'uint8=>uint8');
 
-        % Decompress if needed
+        % 解压
         switch comp
-            case 1      % no compression
+            case 1      % 无压缩
                 dec = raw_bytes;
-            case 32773  % PackBits
+            case 32773  % PackBits 压缩
                 dec = packbits_decode(raw_bytes);
             otherwise
                 error('readtif_custom:compress', ...
-                      'Compression type %d is not supported.', comp);
+                      '不支持的压缩类型：%d', comp);
         end
 
-        % Reshape tile data: raw bytes → typed values → (rows x cols)
+        % 将原始字节转为类型化数值并重塑为 (行×列)
         tile_vals = typecast(dec(:)', read_prec);
-        tile_data = reshape(tile_vals, tw, th).';   % transpose: row-major → MATLAB
+        tile_data = reshape(tile_vals, tw, th).';   % 转置：行主序→MATLAB列主序
 
-        % Tile position in the image grid (TIFF tiles: row-major order)
+        % 计算当前块在图像中的位置
         tile_row = floor((t-1) / tiles_across) + 1;
         tile_col = mod(t-1, tiles_across) + 1;
 
@@ -153,14 +153,14 @@ function data = readtif_custom(filepath)
     data = img;
 end
 
-%% ========================  Helper functions  =============================
+%% ======================== 辅助函数 =============================
 
 function v = val_scalar(vraw, dt, le)
-% Extract a single scalar value from the raw 4-byte IFD value field.
-    if dt == 3  % SHORT (2 bytes)
+% 从4字节 IFD 值字段中提取标量
+    if dt == 3  % SHORT（2字节）
         if le, v = typecast(vraw(1:2), 'uint16');
-        else,  v = typecast(vraw(1:-1:2), 'uint16'); end   % TODO: BE not tested
-    elseif dt == 4  % LONG (4 bytes)
+        else,  v = typecast(vraw(1:-1:2), 'uint16'); end
+    elseif dt == 4  % LONG（4字节）
         if le, v = typecast(vraw, 'uint32');
         else,  v = typecast(vraw(end:-1:1), 'uint32'); end
     else
@@ -171,19 +171,19 @@ function v = val_scalar(vraw, dt, le)
 end
 
 function arr = read_tag_array(fid, vraw, dt, cnt, n_expected, le)
-% Read an array of values that may be inline (≤4 bytes) or at an offset.
+% 读取可能内联（≤4字节）或偏移存储的值数组
     elem_size = 4;
-    if dt == 3, elem_size = 2; end   % SHORT
+    if dt == 3, elem_size = 2; end
 
     if cnt * elem_size <= 4
-        % Values are packed in the 4-byte IFD value field
+        % 值直接内嵌在4字节 IFD 字段中
         if dt == 3
             arr = double(typecast(vraw(1:cnt*2), 'uint16'));
         else
             arr = double(typecast(vraw(1:cnt*4), 'uint32'));
         end
     else
-        % vraw contains a file offset to the actual array
+        % vraw 包含指向实际数组的文件偏移
         off = double(typecast(vraw, 'uint32'));
         cur = ftell(fid);
         fseek(fid, off, 'bof');
@@ -198,31 +198,32 @@ function arr = read_tag_array(fid, vraw, dt, cnt, n_expected, le)
 end
 
 function out = packbits_decode(in)
-% PACKBITS_DECODE  Decompress a PackBits (TIFF compression type 32773) stream.
-%   IN  – uint8 column/row vector of compressed bytes
-%   OUT – uint8 row vector of decompressed bytes
+% PACKBITS_DECODE — 解压 PackBits（TIFF 压缩类型 32773）
 %
-%   Algorithm (per TIFF spec):
-%     n in [0,127]   → copy next (n+1) bytes literally
-%     n in [-1,-127] → repeat next byte (1-n) times
-%     n == -128      → no-op
-    in = in(:)';          % ensure row vector
+%   IN  — uint8 压缩字节流
+%   OUT — uint8 解压后的字节流
+%
+%   TIFF PackBits 算法：
+%     n ∈ [0, 127]    → 原样复制后续 (n+1) 字节
+%     n ∈ [-127, -1]  → 将后续1字节重复 (1-n) 次
+%     n == -128       → 无操作
+
+    in = in(:)';
     n_in = length(in);
-    % Pre-allocate output (worst case: 128x expansion)
-    out = zeros(1, n_in * 128, 'uint8');
+    out = zeros(1, n_in * 128, 'uint8');  % 预分配（最坏情况128倍膨胀）
     ip = 1;
     op = 1;
     while ip <= n_in
         n = in(ip);
         ip = ip + 1;
         if n <= 127
-            % Literal: copy next (n+1) bytes
+            % 原样复制 (n+1) 字节
             n_lit = double(n) + 1;
             out(op:op+n_lit-1) = in(ip:ip+n_lit-1);
             ip = ip + n_lit;
             op = op + n_lit;
         elseif n > 128
-            % Run: repeat next byte (257-n) times  (n in 129..255 → 128..2 repeats)
+            % 重复后续字节 (257-n) 次
             n_rep = 257 - double(n);
             if ip > n_in, break; end
             run_val = in(ip);
@@ -230,20 +231,20 @@ function out = packbits_decode(in)
             out(op:op+n_rep-1) = run_val;
             op = op + n_rep;
         end
-        % n == 128 is a no-op (TIFF PackBits spec)
+        % n == 128 为无操作
     end
-    out = out(1:op-1);   % trim to actual size
+    out = out(1:op-1);
 end
 
 function v = ru16(fid, le)
-% Read a uint16, respecting byte order.
+% 按字节序读取 uint16
     raw = fread(fid, 2, 'uint8=>uint8');
     if le, v = typecast(raw, 'uint16');
     else,  v = typecast(raw(end:-1:1), 'uint16'); end
 end
 
 function v = ru32(fid, le)
-% Read a uint32, respecting byte order.
+% 按字节序读取 uint32
     raw = fread(fid, 4, 'uint8=>uint8');
     if le, v = typecast(raw, 'uint32');
     else,  v = typecast(raw(end:-1:1), 'uint32'); end

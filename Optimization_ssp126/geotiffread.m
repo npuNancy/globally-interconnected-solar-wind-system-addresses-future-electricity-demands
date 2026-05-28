@@ -1,13 +1,13 @@
 function data = geotiffread(filename)
-% GEOTIFFREAD  Drop-in replacement for Mapping Toolbox geotiffread.
-%   DATA = GEOTIFFREAD(FILENAME) reads a single-band TIFF file using
-%   readtif_custom (pure MATLAB, no toolbox needed) and returns the data
-%   matrix.  Spatial-reference output (second return value) is not
-%   supported — use readgeoraster wrapper if you need it.
+% GEOTIFFREAD — GeoTIFF 读取（Mapping Toolbox 替代实现）
 %
-%   The function first looks for a pre-converted .mat file (created by
-%   convert_tif_to_mat.py) which is faster.  If the .mat file is absent,
-%   it falls back to reading the .tif directly.
+% 无需 Mapping Toolbox 即可读取单波段 TIFF 文件。
+% 优先加载预转换的 .mat 文件（由 convert_tif_to_mat.py 生成），
+% 若 .mat 不存在则回退至 readtif_custom 直接读取 .tif。
+%
+% 输入：filename - TIFF 文件路径
+% 输出：data - 二维栅格数据矩阵
+
     [p, f, ext] = fileparts(filename);
     if isempty(ext), ext = '.tif'; end
     if isempty(p)
@@ -15,6 +15,7 @@ function data = geotiffread(filename)
     else
         mat_file = fullfile(p, [f '.mat']);
     end
+    % 优先从预转换的 .mat 文件加载（速度更快）
     if exist(mat_file, 'file')
         s = load(mat_file, 'data');
         data = s.data;

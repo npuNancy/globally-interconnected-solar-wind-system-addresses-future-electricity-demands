@@ -1,23 +1,26 @@
 function minCapacity = calculatePathCapacity(path, capacityMatrix)
-    % Calculate the connectivity capacity for a given path
-    % path: Sequence of nodes in the path
-    % capacityMatrix: Connection capacity matrix
+% calculatePathCapacity — 计算输电路径的最小可用容量
+%
+% 输电路径的瓶颈容量由路径上容量最小的单段决定（木桶效应）。
+%
+% 输入：
+%   path           - 路径节点序列，如 [3, 5, 8] 表示 3→5→8
+%   capacityMatrix - 区域间输电容量矩阵（20×20）
+%
+% 输出：
+%   minCapacity - 路径最小容量（即瓶颈容量）
 
-    minCapacity = Inf;  % Initialize minimum capacity to positive infinity
+    minCapacity = Inf;  % 初始化为正无穷
 
-    % Iterate through each pair of consecutive nodes in the path
+    % 遍历路径上每一段连接
     for i = 1:(length(path) - 1)
         node1 = path(i);
         node2 = path(i + 1);
-
-        % Get the capacity for the edge between node1 and node2
         edgeCapacity = capacityMatrix(node1, node2);
-
-        % Update the minimum capacity if the current edge capacity is lower
         minCapacity = min(minCapacity, edgeCapacity);
     end
 
-    % If no edges are found (path length is less than 2), set capacity to 0
+    % 若路径长度不足2个节点（无连接），容量设为0
     if minCapacity == Inf
         minCapacity = 0;
     end

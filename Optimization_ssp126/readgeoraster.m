@@ -1,13 +1,13 @@
 function varargout = readgeoraster(filename)
-% READGEORASTER  Drop-in replacement for Mapping Toolbox readgeoraster.
+% READGEORASTER — 地理栅格读取（Mapping Toolbox 替代实现）
+%
+% 用法：
 %   DATA = READGEORASTER(FILENAME)
 %   [DATA, R] = READGEORASTER(FILENAME)
 %
-%   R is returned as an empty struct (the scripts in this project never
-%   use the spatial-reference object, so this is safe).
-%
-%   Like geotiffread, this function first checks for a pre-converted
-%   .mat file, then falls back to readtif_custom.
+% R 返回为空结构体（本项目的脚本不使用空间参考对象）。
+% 内部逻辑与 geotiffread 相同：优先加载 .mat，回退至 readtif_custom。
+
     [p, f, ext] = fileparts(filename);
     if isempty(ext), ext = '.tif'; end
     if isempty(p)
@@ -23,7 +23,7 @@ function varargout = readgeoraster(filename)
         data = readtif_custom(tif_file);
     end
     if nargout >= 2
-        R = struct();   % dummy spatial reference — not used by any script
+        R = struct();   % 空空间参考——本项目不使用
         varargout = {data, R};
     else
         varargout = {data};
