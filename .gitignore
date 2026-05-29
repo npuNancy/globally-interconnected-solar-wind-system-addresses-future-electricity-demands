@@ -12,6 +12,7 @@ Data/processed/*
 output/*
 data
 results/*
+Optimization/results/
 Optimization_ssp126/results/
 Optimization_ssp245/results/
 Optimization_ssp560/results/
