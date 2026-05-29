@@ -4,7 +4,7 @@
 %       空间选址、储能配置和跨区输电容量的 Pareto 最优方案。
 %
 % 与2050年的嵌套关系：
-%   - 候选格网由2050年优化结果（Opt_SC_2050_Sel.mat）约束，仅保留2050年选中的格网
+%   - 候选格网由2050年优化结果（results/Opt_SC_2050_Sel.mat）约束，仅保留2050年选中的格网
 %   - 储能/输电上界由2050年结果约束（不超过2050年配置）
 %
 % 情景假设（AR6 SSP5-6.0）：
@@ -17,7 +17,7 @@
 %   f(2) = 1 - 可再生渗透率（最小化）
 %   f(3) = 系统总成本（USD billion, 最小化）
 %
-% 输出：Optimization_SC_2040_Res.h5
+% 输出：results/Optimization_SC_2040_Res.h5
 
 clear,clc
 
@@ -37,7 +37,7 @@ end
 %% ======================== 2. 加载2050年优化结果（约束候选格网） ========================
 % 从2050年选中的空间布局中获取 opt_trans/opt_stoCap/opt_stoPow/opt_wind/opt_solar
 % 2040年的候选格网和储能/输电容量的上界均受此约束
-load Opt_SC_2050_Sel opt_trans opt_stoCap opt_stoPow opt_wind opt_solar
+load results/Opt_SC_2050_Sel opt_trans opt_stoCap opt_stoPow opt_wind opt_solar
 
 %% ======================== 3. 构建风电候选格网（受2050约束） ========================
 % 构建完整风电候选列表（与2050相同的筛选逻辑）
@@ -159,12 +159,13 @@ disp(T)
 fprintf('优化完成，共 %d 个 Pareto 解\n', size(prs,1));
 
 %% ======================== 10. 保存结果 ========================
-if exist('Optimization_SC_2040_Res.h5','file'), delete('Optimization_SC_2040_Res.h5'); end
-h5create('Optimization_SC_2040_Res.h5','/res_scale',size(res_scale));
-h5write('Optimization_SC_2040_Res.h5','/res_scale',res_scale);
-h5create('Optimization_SC_2040_Res.h5','/prs',size(prs));
-h5write('Optimization_SC_2040_Res.h5','/prs',prs);
-fprintf('结果已保存至 Optimization_SC_2040_Res.h5\n');
+mkdir -p results;  % 确保结果目录存在
+if exist('results/Optimization_SC_2040_Res.h5','file'), delete('results/Optimization_SC_2040_Res.h5'); end
+h5create('results/Optimization_SC_2040_Res.h5','/res_scale',size(res_scale));
+h5write('results/Optimization_SC_2040_Res.h5','/res_scale',res_scale);
+h5create('results/Optimization_SC_2040_Res.h5','/prs',size(prs));
+h5write('results/Optimization_SC_2040_Res.h5','/prs',prs);
+fprintf('结果已保存至 results/Optimization_SC_2040_Res.h5\n');
 
 %% ======================== 11. 关闭并行池 ========================
 pool = gcp('nocreate');

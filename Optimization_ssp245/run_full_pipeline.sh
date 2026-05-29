@@ -84,4 +84,4 @@ echo "  流水线完成：$(date)"
 echo "=========================================="
 echo ""
 echo "输出文件："
-ls -lh Optimization_*_Res.h5 Opt_*_Sel.mat 2>/dev/null
+ls -lh results/Optimization_*_Res.h5 results/Opt_*_Sel.mat 2>/dev/null

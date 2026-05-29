@@ -16,7 +16,7 @@
 % 决策变量：
 %   [光伏选址(0/1) | 风电选址(0/1) | 储能功率(20区域) | 储能时长(20区域) | 输电容量(n_trans条链路)]
 %
-% 输出：Optimization_SC_2050_Res.h5（Pareto 前沿 + 决策向量）
+% 输出：results/Optimization_SC_2050_Res.h5（Pareto 前沿 + 决策向量）
 
 clear,clc
 
@@ -178,12 +178,13 @@ disp(T)
 fprintf('优化完成，共 %d 个 Pareto 解\n', size(prs,1));
 
 %% ======================== 9. 保存结果 ========================
-if exist('Optimization_SC_2050_Res.h5','file'), delete('Optimization_SC_2050_Res.h5'); end
-h5create('Optimization_SC_2050_Res.h5','/res_scale',size(res_scale));
-h5write('Optimization_SC_2050_Res.h5','/res_scale',res_scale);
-h5create('Optimization_SC_2050_Res.h5','/prs',size(prs));
-h5write('Optimization_SC_2050_Res.h5','/prs',prs);
-fprintf('结果已保存至 Optimization_SC_2050_Res.h5\n');
+mkdir -p results;  % 确保结果目录存在
+if exist('results/Optimization_SC_2050_Res.h5','file'), delete('results/Optimization_SC_2050_Res.h5'); end
+h5create('results/Optimization_SC_2050_Res.h5','/res_scale',size(res_scale));
+h5write('results/Optimization_SC_2050_Res.h5','/res_scale',res_scale);
+h5create('results/Optimization_SC_2050_Res.h5','/prs',size(prs));
+h5write('results/Optimization_SC_2050_Res.h5','/prs',prs);
+fprintf('结果已保存至 results/Optimization_SC_2050_Res.h5\n');
 
 %% ======================== 10. 关闭并行池 ========================
 pool = gcp('nocreate');

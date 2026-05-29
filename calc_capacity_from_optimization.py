@@ -276,7 +276,12 @@ def main():
     }
     opt_dir = base_dir / source_dir_map[args.source]
 
-    res_dir = Path(args.res_dir) if args.res_dir else base_dir / "Resilience"
+    if args.res_dir:
+        res_dir = Path(args.res_dir)
+    elif args.source == "optimization":
+        res_dir = base_dir / "Resilience"
+    else:
+        res_dir = opt_dir / "results"
 
     print(f"优化目录：{opt_dir}")
     print(f"结果目录：{res_dir}")

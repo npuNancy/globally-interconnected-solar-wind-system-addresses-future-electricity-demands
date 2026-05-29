@@ -19,13 +19,13 @@ fprintf('=== h5 转 Sel：year=%d, sol_idx=%d ===\n', year, sol_idx);
 %% 1. 确定文件名和前缀
 switch year
     case 2050
-        h5file = 'Optimization_SC_2050_Res.h5';
+        h5file = 'results/Optimization_SC_2050_Res.h5';
         selprefix = 'Opt_SC_2050';
     case 2040
-        h5file = 'Optimization_SC_2040_Res.h5';
+        h5file = 'results/Optimization_SC_2040_Res.h5';
         selprefix = 'Opt_SC_2040';
     case 2030
-        h5file = 'Optimization_SA_2030_Res.h5';
+        h5file = 'results/Optimization_SA_2030_Res.h5';
         selprefix = 'Opt_SA_2030';
     otherwise
         error('year 必须为 2030、2040 或 2050');
@@ -127,9 +127,9 @@ fprintf('2050年风电候选格网：%d 个\n', length(win_index));
 %% 5. 对于 2040/2030，应用上一阶段 Sel 进行预筛选
 if year ~= 2050
     if year == 2040
-        load('Opt_SC_2050_Sel.mat', 'opt_wind', 'opt_solar');  % 2050选中结果
+        load('results/Opt_SC_2050_Sel.mat', 'opt_wind', 'opt_solar');  % 2050选中结果
     else
-        load('Opt_SC_2040_Sel.mat', 'opt_wind', 'opt_solar');  % 2040选中结果
+        load('results/Opt_SC_2040_Sel.mat', 'opt_wind', 'opt_solar');  % 2040选中结果
     end
 
     % 光伏：从完整2050候选中筛选上一阶段选中的格网
@@ -201,7 +201,7 @@ opt_trans(trans_mask) = trans_values;
 fprintf('opt_trans 非零数=%d\n', nnz(opt_trans));
 
 %% 9. 保存
-outfile = [selprefix '_Sel.mat'];
+outfile = ['results/' selprefix '_Sel.mat'];  mkdir -p results;
 save(outfile, 'opt_solar', 'opt_wind', 'opt_stoPow', 'opt_stoCap', 'opt_trans');
 fprintf('\n已保存 %s\n', outfile);
 
