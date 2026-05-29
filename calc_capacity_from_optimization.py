@@ -62,9 +62,13 @@ YEAR_CONFIG = {
 }
 
 
-def calc_capacity_for_year(opt_dir: Path, res_dir: Path, year: int):
+def calc_capacity_for_year(opt_dir: Path, res_dir: Path, year: int, source: str = "optimization"):
     """从某年的优化结果计算光伏/风电装机容量。"""
-    cfg = YEAR_CONFIG[year]
+    cfg = dict(YEAR_CONFIG[year])
+    # 原始 Optimization/ 的 2050 使用全球互联（SG），文件名不同
+    if source == "optimization" and year == 2050:
+        cfg["h5_name"] = "Optimization_SG_2050_Res.h5"
+        cfg["label"] = "2050 S-G（全球互联）"
 
     # 加载 NonlConData（候选格网装机容量数据）
     nonlcon_path = opt_dir / cfg["nonlcon_name"]
@@ -278,8 +282,6 @@ def main():
 
     if args.res_dir:
         res_dir = Path(args.res_dir)
-    elif args.source == "optimization":
-        res_dir = base_dir / "Resilience"
     else:
         res_dir = opt_dir / "results"
 
@@ -288,7 +290,7 @@ def main():
 
     results = []
     for year in [2050, 2040, 2030]:
-        res = calc_capacity_for_year(opt_dir, res_dir, year)
+        res = calc_capacity_for_year(opt_dir, res_dir, year, args.source)
         if res:
             print_results(res)
             if args.regional:

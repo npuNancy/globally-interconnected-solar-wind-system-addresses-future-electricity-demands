@@ -13,7 +13,7 @@ catch ME
     end
 end
 
-load Opt_SG_2050_Sel opt_trans opt_stoCap opt_stoPow opt_wind opt_solar
+load results/Opt_SG_2050_Sel opt_trans opt_stoCap opt_stoPow opt_wind opt_solar
 %wind generation curves
 luccs=geotiffread('Global_Wind_Net_Area_Add_Egrid.tif');
 luccs=luccs/100;% percentage
@@ -135,10 +135,11 @@ options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[]);
 %     nvars,[],[],[],[],lb,ub,[],intcon,options);
 T = datetime('now');
 disp(T)
-h5create('Optimization_SC_2040_Res.h5','/res_scale',size(res_scale));
-h5write('Optimization_SC_2040_Res.h5','/res_scale',res_scale);
-h5create('Optimization_SC_2040_Res.h5','/prs',size(prs));
-h5write('Optimization_SC_2040_Res.h5','/prs',prs);
+mkdir -p results;  % 确保结果目录存在
+h5create('results/Optimization_SC_2040_Res.h5','/res_scale',size(res_scale));
+h5write('results/Optimization_SC_2040_Res.h5','/res_scale',res_scale);
+h5create('results/Optimization_SC_2040_Res.h5','/prs',size(prs));
+h5write('results/Optimization_SC_2040_Res.h5','/prs',prs);
 
 % Shutdown parallel pool
 pool = gcp('nocreate');
