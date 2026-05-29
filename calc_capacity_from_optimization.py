@@ -22,7 +22,6 @@ import h5py
 import scipy.io as sio
 from pathlib import Path
 
-
 # ── AR6 参考值（5模型均值，单位 GW） ──────────────────────────────────
 AR6_REFERENCE = {
     "SSP1-26": {
@@ -77,9 +76,9 @@ def calc_capacity_for_year(opt_dir: Path, res_dir: Path, year: int, source: str 
         return None
 
     ncd = sio.loadmat(str(nonlcon_path))
-    nonlsol = int(ncd["nonlsol"].flatten()[0])      # 光伏候选格网数
-    nonlcon_ins = ncd["nonlcon_ins"].flatten()       # 各候选格网装机容量（TWp）
-    nonlcon_sel = ncd["nonlcon_sel"].flatten()       # 各候选格网所属区域编号（1-20）
+    nonlsol = int(ncd["nonlsol"].flatten()[0])  # 光伏候选格网数
+    nonlcon_ins = ncd["nonlcon_ins"].flatten()  # 各候选格网装机容量（TWp）
+    nonlcon_sel = ncd["nonlcon_sel"].flatten()  # 各候选格网所属区域编号（1-20）
     N = len(nonlcon_ins)
 
     # 加载 h5 优化结果
@@ -90,16 +89,16 @@ def calc_capacity_for_year(opt_dir: Path, res_dir: Path, year: int, source: str 
 
     with h5py.File(str(h5_path)) as f:
         res_scale = f["res_scale"][:]  # (nvars, n_pareto) — 决策向量矩阵
-        prs = f["prs"][:]              # (n_objectives, n_pareto) — 目标函数值矩阵
+        prs = f["prs"][:]  # (n_objectives, n_pareto) — 目标函数值矩阵
 
     n_pareto = res_scale.shape[1]
     n_objectives = prs.shape[0]
 
     # 逐解计算装机容量
-    solar_caps = np.zeros(n_pareto)          # 各解光伏总装机（GW）
-    wind_caps = np.zeros(n_pareto)           # 各解风电总装机（GW）
+    solar_caps = np.zeros(n_pareto)  # 各解光伏总装机（GW）
+    wind_caps = np.zeros(n_pareto)  # 各解风电总装机（GW）
     n_solar_selected = np.zeros(n_pareto, dtype=int)  # 各解选中的光伏格网数
-    n_wind_selected = np.zeros(n_pareto, dtype=int)   # 各解选中的风电格网数
+    n_wind_selected = np.zeros(n_pareto, dtype=int)  # 各解选中的风电格网数
 
     # 各区域装机（用于中位成本解的区域分布分析）
     region_solar = np.zeros((20, n_pareto))
@@ -120,8 +119,8 @@ def calc_capacity_for_year(opt_dir: Path, res_dir: Path, year: int, source: str 
 
         # 按区域汇总
         for r in range(1, 21):
-            sol_mask = (nonlcon_sel[:nonlsol] == r)
-            win_mask = (nonlcon_sel[nonlsol:N] == r)
+            sol_mask = nonlcon_sel[:nonlsol] == r
+            win_mask = nonlcon_sel[nonlsol:N] == r
             region_solar[r - 1, i] = np.sum(nonlcon_ins[:nonlsol][sol_mask] * solar_sel[sol_mask]) * 1000
             region_wind[r - 1, i] = np.sum(nonlcon_ins[nonlsol:N][win_mask] * wind_sel[win_mask]) * 1000
 
@@ -183,9 +182,13 @@ def print_results(result: dict):
     print(f"\n  {'统计量':<20} {'光伏 (GW)':>12} {'风电 (GW)':>12} {'合计 (GW)':>12}")
     print(f"  {'─' * 56}")
     print(f"  {'最小值':<20} {solar.min():>12,.0f} {wind.min():>12,.0f} {total.min():>12,.0f}")
-    print(f"  {'25%分位数':<20} {np.percentile(solar, 25):>12,.0f} {np.percentile(wind, 25):>12,.0f} {np.percentile(total, 25):>12,.0f}")
+    print(
+        f"  {'25%分位数':<20} {np.percentile(solar, 25):>12,.0f} {np.percentile(wind, 25):>12,.0f} {np.percentile(total, 25):>12,.0f}"
+    )
     print(f"  {'中位数':<20} {np.median(solar):>12,.0f} {np.median(wind):>12,.0f} {np.median(total):>12,.0f}")
-    print(f"  {'75%分位数':<20} {np.percentile(solar, 75):>12,.0f} {np.percentile(wind, 75):>12,.0f} {np.percentile(total, 75):>12,.0f}")
+    print(
+        f"  {'75%分位数':<20} {np.percentile(solar, 75):>12,.0f} {np.percentile(wind, 75):>12,.0f} {np.percentile(total, 75):>12,.0f}"
+    )
     print(f"  {'最大值':<20} {solar.max():>12,.0f} {wind.max():>12,.0f} {total.max():>12,.0f}")
     print(f"  {'均值':<20} {solar.mean():>12,.0f} {wind.mean():>12,.0f} {total.mean():>12,.0f}")
 
@@ -206,8 +209,10 @@ def print_results(result: dict):
             ref_w = ssp_data[year]["wind_gw"]
             ratio_s = np.median(solar) / ref_s if ref_s > 0 else float("inf")
             ratio_w = np.median(wind) / ref_w if ref_w > 0 else float("inf")
-            print(f"    {ssp_name:<10}  光伏：{ref_s:>7,} GW（优化/参考 = {ratio_s:.2f}x）"
-                  f"  风电：{ref_w:>7,} GW（优化/参考 = {ratio_w:.2f}x）")
+            print(
+                f"    {ssp_name:<10}  光伏：{ref_s:>7,} GW（优化/参考 = {ratio_s:.2f}x）"
+                f"  风电：{ref_w:>7,} GW（优化/参考 = {ratio_w:.2f}x）"
+            )
 
 
 def print_comparison_table(results: list):
@@ -232,7 +237,9 @@ def print_comparison_table(results: list):
         for ssp_name in ["SSP1-26", "SSP2-45", "SSP5-60"]:
             ref = AR6_REFERENCE[ssp_name].get(year)
             if ref:
-                print(f"  {'':<12} {ssp_name:<18} {ref['solar_gw']:>12,} {ref['wind_gw']:>12,} {ref['solar_gw']+ref['wind_gw']:>12,}")
+                print(
+                    f"  {'':<12} {ssp_name:<18} {ref['solar_gw']:>12,} {ref['wind_gw']:>12,} {ref['solar_gw']+ref['wind_gw']:>12,}"
+                )
         print(f"  {'─' * 66}")
 
 
@@ -262,12 +269,14 @@ def print_regional_breakdown(result: dict, top_n: int = 5):
 
 def main():
     parser = argparse.ArgumentParser(description="从优化结果计算风电/光伏装机容量")
-    parser.add_argument("--source", choices=["optimization", "ssp126", "ssp245", "ssp560"], default="optimization",
-                        help="使用哪个优化目录（默认：optimization）")
-    parser.add_argument("--res-dir", type=str, default=None,
-                        help="自定义 .h5 结果文件目录（默认：Resilience/）")
-    parser.add_argument("--regional", action="store_true",
-                        help="同时打印各区域装机分布")
+    parser.add_argument(
+        "--source",
+        choices=["optimization", "ssp126", "ssp245", "ssp560"],
+        default="optimization",
+        help="使用哪个优化目录（默认：optimization）",
+    )
+    parser.add_argument("--res-dir", type=str, default=None, help="自定义 .h5 结果文件目录（默认：Resilience/）")
+    parser.add_argument("--regional", action="store_true", help="同时打印各区域装机分布")
     args = parser.parse_args()
 
     base_dir = Path(__file__).parent
