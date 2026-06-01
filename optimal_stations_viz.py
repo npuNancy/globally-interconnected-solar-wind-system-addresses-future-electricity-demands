@@ -19,6 +19,7 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import scipy.io
 import h5py
+import csv
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
@@ -163,13 +164,110 @@ def get_stations(data_dir, year):
     # 回退: .h5 帕累托解 + 上层 .mat 候选坐标
     h5_path = _find_file(data_dir, H5_PATTERNS[year])
     parent_year = PARENT_YEAR.get(year)
-    parent_mat_path = (
-        _find_file(data_dir, MAT_PATTERNS[parent_year]) if parent_year else None
-    )
+    parent_mat_path = _find_file(data_dir, MAT_PATTERNS[parent_year]) if parent_year else None
     if h5_path and parent_mat_path:
         return extract_stations_from_h5(h5_path, SOLUTION_INDICES[year], parent_mat_path)
 
     return None
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 装机容量 & CSV 导出
+# ══════════════════════════════════════════════════════════════════════
+
+
+def _build_capacity_grids(opt_dir):
+    """构建 180×360 光伏/风电装机容量栅格（GW）。
+
+    容量 = 安装密度(MW/km²) × 可用面积比例 × 格网面积(km²) / 1000
+    """
+    solar_luccs = scipy.io.loadmat(os.path.join(opt_dir, "Global_Solar_Net_Area_Add_Egrid.mat"))["data"] / 100.0
+    solar_area = scipy.io.loadmat(os.path.join(opt_dir, "Global_Solar_Fishnet_Area.mat"))["data"].astype(float)
+    solar_cap = 74 * solar_luccs * solar_area / 1000
+
+    wind_luccs = scipy.io.loadmat(os.path.join(opt_dir, "Global_Wind_Net_Area_Add_Egrid.mat"))["data"] / 100.0
+    wind_area = scipy.io.loadmat(os.path.join(opt_dir, "Global_Wind_Fishnet_Area.mat"))["data"]
+    landmask = scipy.io.loadmat(os.path.join(opt_dir, "Global_LandMask.mat"))["data"]
+    density = np.where(landmask > 100, 4.6, 2.7)
+    wind_cap = density * wind_luccs * wind_area / 1000
+
+    return solar_cap, wind_cap
+
+
+def get_stations_with_cap(data_dir, year, solar_cap, wind_cap):
+    """获取指定年份的光伏+风电场站坐标及装机容量。
+
+    Returns: dict {year: (slon, slat, scap, ns, wlon, wlat, wcap, nw)} 或 None
+    """
+    mat_path = _find_file(data_dir, MAT_PATTERNS[year])
+    if mat_path:
+        mat = scipy.io.loadmat(mat_path)
+        opt_solar, opt_wind = mat["opt_solar"], mat["opt_wind"]
+        nrows = opt_solar.shape[0]
+
+        sflat = np.nonzero(opt_solar.ravel(order="F"))[0]
+        srows, scols = sflat % nrows, sflat // nrows
+        slon, slat = -179.5 + scols, 89.5 - srows
+        scap = solar_cap[srows, scols]
+
+        wflat = np.nonzero(opt_wind.ravel(order="F"))[0]
+        wrows, wcols = wflat % nrows, wflat // nrows
+        wlon, wlat = -179.5 + wcols, 89.5 - wrows
+        wcap = wind_cap[wrows, wcols]
+
+        return slon, slat, scap, len(slon), wlon, wlat, wcap, len(wlon)
+
+    h5_path = _find_file(data_dir, H5_PATTERNS[year])
+    parent_year = PARENT_YEAR.get(year)
+    parent_mat_path = _find_file(data_dir, MAT_PATTERNS[parent_year]) if parent_year else None
+    if h5_path and parent_mat_path:
+        parent_mat = scipy.io.loadmat(parent_mat_path)
+        opt_solar, opt_wind = parent_mat["opt_solar"], parent_mat["opt_wind"]
+        nrows = opt_solar.shape[0]
+
+        sflat = np.nonzero(opt_solar.ravel(order="F"))[0]
+        wflat = np.nonzero(opt_wind.ravel(order="F"))[0]
+        ns, nw = len(sflat), len(wflat)
+
+        with h5py.File(h5_path, "r") as f:
+            res_scale = f["/res_scale"][:]
+        if res_scale.shape[0] > res_scale.shape[1]:
+            res_scale = res_scale.T
+        sol = res_scale[SOLUTION_INDICES[year] - 1]
+        sel = np.round(sol[: ns + nw]).astype(int)
+
+        srows, scols = sflat % nrows, sflat // nrows
+        slon_all, slat_all = -179.5 + scols, 89.5 - srows
+        wrows, wcols = wflat % nrows, wflat // nrows
+        wlon_all, wlat_all = -179.5 + wcols, 89.5 - wrows
+
+        sm = sel[:ns] == 1
+        wm = sel[ns:] == 1
+        return (
+            slon_all[sm], slat_all[sm], solar_cap[srows[sm], scols[sm]], int(sm.sum()),
+            wlon_all[wm], wlat_all[wm], wind_cap[wrows[wm], wcols[wm]], int(wm.sum()),
+        )
+
+    return None
+
+
+def save_stations_csv(data_dir, scenario_name, cap_results):
+    """保存场站选址结果为 CSV：year,type,lon,lat,capacity_gw。"""
+    csv_path = os.path.join(data_dir, f"stations_{scenario_name}.csv")
+    n_rows = 0
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["year", "type", "lon", "lat", "capacity_gw"])
+        for year in [2050, 2040, 2030]:
+            if year not in cap_results:
+                continue
+            slon, slat, scap, ns, wlon, wlat, wcap, nw = cap_results[year]
+            for i in range(ns):
+                writer.writerow([year, "solar", f"{slon[i]:.1f}", f"{slat[i]:.1f}", f"{scap[i]:.4f}"])
+            for i in range(nw):
+                writer.writerow([year, "wind", f"{wlon[i]:.1f}", f"{wlat[i]:.1f}", f"{wcap[i]:.4f}"])
+            n_rows += ns + nw
+    print(f"  -> {csv_path} ({n_rows} stations)")
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -179,9 +277,7 @@ def get_stations(data_dir, year):
 
 def plot_scenario(scenario_name, data_dir, results):
     """单情景：上子图=光伏，下子图=风电，3 个年份叠加。"""
-    fig, (ax_s, ax_w) = plt.subplots(
-        2, 1, figsize=(16, 14), subplot_kw={"projection": ccrs.Robinson()}
-    )
+    fig, (ax_s, ax_w) = plt.subplots(2, 1, figsize=(16, 14), subplot_kw={"projection": ccrs.Robinson()})
     setup_basemap(ax_s)
     setup_basemap(ax_w)
 
@@ -191,13 +287,19 @@ def plot_scenario(scenario_name, data_dir, results):
         slon, slat, ns, wlon, wlat, nw = results[year]
 
         ax_s.scatter(
-            slon, slat, s=3, c=YEAR_COLORS[year],
+            slon,
+            slat,
+            s=3,
+            c=YEAR_COLORS[year],
             transform=ccrs.PlateCarree(),
             label=f"{year} ({ns:,})",
             rasterized=True,
         )
         ax_w.scatter(
-            wlon, wlat, s=3, c=YEAR_COLORS[year],
+            wlon,
+            wlat,
+            s=3,
+            c=YEAR_COLORS[year],
             transform=ccrs.PlateCarree(),
             label=f"{year} ({nw:,})",
             rasterized=True,
@@ -249,13 +351,24 @@ def main():
             all_results[scenario_name] = results
             plot_scenario(scenario_name, data_dir, results)
 
+        # CSV 导出：含装机容量
+        opt_dir = os.path.dirname(data_dir)
+        cap_files = ["Global_Solar_Net_Area_Add_Egrid.mat", "Global_LandMask.mat"]
+        if all(os.path.exists(os.path.join(opt_dir, f)) for f in cap_files):
+            solar_cap, wind_cap = _build_capacity_grids(opt_dir)
+            cap_results = {}
+            for year in [2050, 2040, 2030]:
+                data = get_stations_with_cap(data_dir, year, solar_cap, wind_cap)
+                if data is not None:
+                    cap_results[year] = data
+            if cap_results:
+                save_stations_csv(data_dir, scenario_name, cap_results)
+
     # 汇总
     print(f"\n{'=' * 60}")
     print("  Summary")
     print(f"{'=' * 60}")
-    header = f"  {'Scenario':<12}" + "".join(
-        f"  {y} solar/wind    " for y in [2050, 2040, 2030]
-    )
+    header = f"  {'Scenario':<12}" + "".join(f"  {y} solar/wind    " for y in [2050, 2040, 2030])
     print(header)
     print("  " + "-" * 78)
     for name, results in all_results.items():
