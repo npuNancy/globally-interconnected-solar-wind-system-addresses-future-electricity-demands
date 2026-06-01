@@ -17,6 +17,8 @@ Optimization_ssp126/results/
 Optimization_ssp245/results/
 Optimization_ssp560/results/
 
+ref_code
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
