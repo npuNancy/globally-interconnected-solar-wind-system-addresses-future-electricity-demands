@@ -18,7 +18,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import scipy.io
-import h5py
 import csv
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
@@ -36,22 +35,14 @@ SCENARIOS = {
     "SSP5-6.0": "Optimization_ssp560/results",
 }
 
-SOLUTION_INDICES = {2030: 5, 2040: 15, 2050: 66}
-
 YEAR_COLORS = {2030: "#c501ff", 2040: "#00ffc5", 2050: "#d48a8b"}
 
-# .mat / .h5 文件名模式（同一年有多种命名时按优先级尝试）
+# .mat 选择文件名模式（同一年有多种命名时按优先级尝试）
 MAT_PATTERNS = {
     2050: ["Opt_SG_2050_Sel.mat", "Opt_SC_2050_Sel.mat"],
     2040: ["Opt_SC_2040_Sel.mat"],
     2030: ["Opt_SA_2030_Sel.mat"],
 }
-H5_PATTERNS = {
-    2050: ["Optimization_SG_2050_Res.h5", "Optimization_SC_2050_Res.h5"],
-    2040: ["Optimization_SC_2040_Res.h5"],
-    2030: ["Optimization_SA_2030_Res.h5"],
-}
-PARENT_YEAR = {2030: 2040}
 
 # ══════════════════════════════════════════════════════════════════════
 # 字体
@@ -116,59 +107,18 @@ def extract_stations_from_mat(mat_path):
     return slon, slat, len(slon), wlon, wlat, len(wlon)
 
 
-def extract_stations_from_h5(h5_path, sol_idx, parent_mat_path):
-    """从 .h5 帕累托解提取选中场站经纬度（需要上层 .mat 提供候选坐标）。
-
-    Returns: (slon, slat, ns_sel, wlon, wlat, nw_sel)
-    """
-    parent_mat = scipy.io.loadmat(parent_mat_path)
-    opt_solar = parent_mat["opt_solar"]
-    opt_wind = parent_mat["opt_wind"]
-    nrows = opt_solar.shape[0]
-
-    sflat = np.nonzero(opt_solar.ravel(order="F"))[0]
-    wflat = np.nonzero(opt_wind.ravel(order="F"))[0]
-    ns, nw = len(sflat), len(wflat)
-
-    with h5py.File(h5_path, "r") as f:
-        res_scale = f["/res_scale"][:]
-    if res_scale.shape[0] > res_scale.shape[1]:
-        res_scale = res_scale.T
-
-    sol = res_scale[sol_idx - 1]
-    sel = np.round(sol[: ns + nw]).astype(int)
-    solar_sel = sel[:ns]
-    wind_sel = sel[ns : ns + nw]
-
-    srows, scols = sflat % nrows, sflat // nrows
-    slon_all, slat_all = -179.5 + scols, 89.5 - srows
-
-    wrows, wcols = wflat % nrows, wflat // nrows
-    wlon_all, wlat_all = -179.5 + wcols, 89.5 - wrows
-
-    sm = solar_sel == 1
-    wm = wind_sel == 1
-    return slon_all[sm], slat_all[sm], int(sm.sum()), wlon_all[wm], wlat_all[wm], int(wm.sum())
-
-
 def get_stations(data_dir, year):
     """获取指定年份的光伏+风电场站坐标。
 
-    Returns: dict {year: (slon, slat, ns, wlon, wlat, nw)} 或 None
+    Returns: (slon, slat, ns, wlon, wlat, nw)
+    Raises: FileNotFoundError — .mat 选择文件不存在
     """
-    # 优先: 直接从 .mat 提取
     mat_path = _find_file(data_dir, MAT_PATTERNS[year])
-    if mat_path:
-        return extract_stations_from_mat(mat_path)
-
-    # 回退: .h5 帕累托解 + 上层 .mat 候选坐标
-    h5_path = _find_file(data_dir, H5_PATTERNS[year])
-    parent_year = PARENT_YEAR.get(year)
-    parent_mat_path = _find_file(data_dir, MAT_PATTERNS[parent_year]) if parent_year else None
-    if h5_path and parent_mat_path:
-        return extract_stations_from_h5(h5_path, SOLUTION_INDICES[year], parent_mat_path)
-
-    return None
+    if mat_path is None:
+        raise FileNotFoundError(
+            f"{year} 年选择文件未找到，期望：{MAT_PATTERNS[year]}（目录：{data_dir}）"
+        )
+    return extract_stations_from_mat(mat_path)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -197,58 +147,30 @@ def _build_capacity_grids(opt_dir):
 def get_stations_with_cap(data_dir, year, solar_cap, wind_cap):
     """获取指定年份的光伏+风电场站坐标及装机容量。
 
-    Returns: dict {year: (slon, slat, scap, ns, wlon, wlat, wcap, nw)} 或 None
+    Returns: (slon, slat, scap, ns, wlon, wlat, wcap, nw)
+    Raises: FileNotFoundError — .mat 选择文件不存在
     """
     mat_path = _find_file(data_dir, MAT_PATTERNS[year])
-    if mat_path:
-        mat = scipy.io.loadmat(mat_path)
-        opt_solar, opt_wind = mat["opt_solar"], mat["opt_wind"]
-        nrows = opt_solar.shape[0]
-
-        sflat = np.nonzero(opt_solar.ravel(order="F"))[0]
-        srows, scols = sflat % nrows, sflat // nrows
-        slon, slat = -179.5 + scols, 89.5 - srows
-        scap = solar_cap[srows, scols]
-
-        wflat = np.nonzero(opt_wind.ravel(order="F"))[0]
-        wrows, wcols = wflat % nrows, wflat // nrows
-        wlon, wlat = -179.5 + wcols, 89.5 - wrows
-        wcap = wind_cap[wrows, wcols]
-
-        return slon, slat, scap, len(slon), wlon, wlat, wcap, len(wlon)
-
-    h5_path = _find_file(data_dir, H5_PATTERNS[year])
-    parent_year = PARENT_YEAR.get(year)
-    parent_mat_path = _find_file(data_dir, MAT_PATTERNS[parent_year]) if parent_year else None
-    if h5_path and parent_mat_path:
-        parent_mat = scipy.io.loadmat(parent_mat_path)
-        opt_solar, opt_wind = parent_mat["opt_solar"], parent_mat["opt_wind"]
-        nrows = opt_solar.shape[0]
-
-        sflat = np.nonzero(opt_solar.ravel(order="F"))[0]
-        wflat = np.nonzero(opt_wind.ravel(order="F"))[0]
-        ns, nw = len(sflat), len(wflat)
-
-        with h5py.File(h5_path, "r") as f:
-            res_scale = f["/res_scale"][:]
-        if res_scale.shape[0] > res_scale.shape[1]:
-            res_scale = res_scale.T
-        sol = res_scale[SOLUTION_INDICES[year] - 1]
-        sel = np.round(sol[: ns + nw]).astype(int)
-
-        srows, scols = sflat % nrows, sflat // nrows
-        slon_all, slat_all = -179.5 + scols, 89.5 - srows
-        wrows, wcols = wflat % nrows, wflat // nrows
-        wlon_all, wlat_all = -179.5 + wcols, 89.5 - wrows
-
-        sm = sel[:ns] == 1
-        wm = sel[ns:] == 1
-        return (
-            slon_all[sm], slat_all[sm], solar_cap[srows[sm], scols[sm]], int(sm.sum()),
-            wlon_all[wm], wlat_all[wm], wind_cap[wrows[wm], wcols[wm]], int(wm.sum()),
+    if mat_path is None:
+        raise FileNotFoundError(
+            f"{year} 年选择文件未找到，期望：{MAT_PATTERNS[year]}（目录：{data_dir}）"
         )
 
-    return None
+    mat = scipy.io.loadmat(mat_path)
+    opt_solar, opt_wind = mat["opt_solar"], mat["opt_wind"]
+    nrows = opt_solar.shape[0]
+
+    sflat = np.nonzero(opt_solar.ravel(order="F"))[0]
+    srows, scols = sflat % nrows, sflat // nrows
+    slon, slat = -179.5 + scols, 89.5 - srows
+    scap = solar_cap[srows, scols]
+
+    wflat = np.nonzero(opt_wind.ravel(order="F"))[0]
+    wrows, wcols = wflat % nrows, wflat // nrows
+    wlon, wlat = -179.5 + wcols, 89.5 - wrows
+    wcap = wind_cap[wrows, wcols]
+
+    return slon, slat, scap, len(slon), wlon, wlat, wcap, len(wlon)
 
 
 def save_stations_csv(data_dir, scenario_name, cap_results):
@@ -339,13 +261,13 @@ def main():
 
         results = {}
         for year in [2050, 2040, 2030]:
-            data = get_stations(data_dir, year)
-            if data is not None:
+            try:
+                data = get_stations(data_dir, year)
                 slon, slat, ns, wlon, wlat, nw = data
                 results[year] = data
                 print(f"  {year}: solar={ns:,}  wind={nw:,}")
-            else:
-                print(f"  {year}: no data")
+            except FileNotFoundError as e:
+                print(f"  {year}: {e}")
 
         if results:
             all_results[scenario_name] = results
@@ -358,9 +280,11 @@ def main():
             solar_cap, wind_cap = _build_capacity_grids(opt_dir)
             cap_results = {}
             for year in [2050, 2040, 2030]:
-                data = get_stations_with_cap(data_dir, year, solar_cap, wind_cap)
-                if data is not None:
+                try:
+                    data = get_stations_with_cap(data_dir, year, solar_cap, wind_cap)
                     cap_results[year] = data
+                except FileNotFoundError:
+                    pass
             if cap_results:
                 save_stations_csv(data_dir, scenario_name, cap_results)
 
