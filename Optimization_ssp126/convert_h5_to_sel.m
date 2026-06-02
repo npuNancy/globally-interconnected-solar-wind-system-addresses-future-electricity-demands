@@ -65,11 +65,13 @@ fish_area = double(fish_area);
 areas = luccs(solar_index_all) .* fish_area(solar_index_all);
 clear luccs fish_area
 
-% 计算装机容量
+% 计算装机容量：纬度依赖安装密度 161.9×Ω(lat)×FR MW/km²
+pv_density = compute_pv_density(solar_index_all);
 solar_ins = zeros(length(solar_index_all), 1);
 for ii = 1:length(solar_index_all)
-    solar_ins(ii) = (74 * areas(ii)) / 1e6;  % 74 MW/km² → TWp
+    solar_ins(ii) = (pv_density(ii) * areas(ii)) / 1e6;  % MW/km² × km² / 1e6 → TWp
 end
+clear pv_density
 
 % 筛选：装机容量 > 0.001 TWp
 tmp = solar_ins > 0.001;
@@ -78,11 +80,12 @@ solar_index_f = solar_index_all(tmp);
 areas_solar_f = areas(tmp);
 
 % 计算发电量并筛选：年发电量 < 90 TWh
+pv_density_f = compute_pv_density(solar_index_f);
 solar_gen_f = zeros(sum(tmp), 8760);
 for ii = 1:sum(tmp)
-    solar_gen_f(ii,:) = res_CF_scaled(tmp_idx(ii), :) * (74 * areas_solar_f(ii)) / 1e6;
+    solar_gen_f(ii,:) = res_CF_scaled(tmp_idx(ii), :) * (pv_density_f(ii) * areas_solar_f(ii)) / 1e6;
 end
-clear res_CF_scaled
+clear res_CF_scaled pv_density_f
 annual_gen_solar = sum(solar_gen_f, 2);
 
 tmp3 = annual_gen_solar < 90;
@@ -101,9 +104,9 @@ landmask = readgeoraster('Global_LandMask.tif');
 landmask(landmask < 100) = 0; landmask(landmask > 100) = 1;
 landmask = landmask(win_index_all);
 
-% 装机容量：陆上 2.7 MW/km²，海上 4.6 MW/km²
-wind_ins = (2.7 * areas) / 1e6;
-wind_ins(landmask == 1) = (4.6 * areas(landmask == 1)) / 1e6;
+% 装机容量：陆上 3.68 MW/km²，海上 6.07 MW/km²
+wind_ins = (3.68 * areas) / 1e6;
+wind_ins(landmask == 1) = (6.07 * areas(landmask == 1)) / 1e6;
 
 wind_gen_all = h5read('Global_Wind_CFs_Sel.h5', '/data');
 

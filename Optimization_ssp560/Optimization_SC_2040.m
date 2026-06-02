@@ -50,9 +50,9 @@ areas=luccs(win_index).*fish_area(win_index);
 landmask=readgeoraster('Global_LandMask.tif');
 landmask(landmask<100)=0;landmask(landmask>100)=1;
 landmask=landmask(win_index);
-% 装机容量：陆上 2.7 MW/km²，海上 4.6 MW/km²
-wind_ins=(2.7*areas)/1000/1000;%单位 TWp
-wind_ins(landmask==1)=(4.6*areas(landmask==1))/1000/1000;%海上
+% 装机容量：陆上 3.68 MW/km²，海上 6.07 MW/km²
+wind_ins=(3.68*areas)/1000/1000;%单位 TWp
+wind_ins(landmask==1)=(6.07*areas(landmask==1))/1000/1000;%海上
 wind_gen=h5read('Global_Wind_CFs_Sel.h5','/data');
 for ii=1:8477
     wind_gen(ii,:)=wind_gen(ii,:)*wind_ins(ii);%单位 TWh
@@ -77,12 +77,14 @@ fish_area(fish_area<0)=0;
 fish_area=double(fish_area);%km2
 areas=luccs(solar_index).*fish_area(solar_index);
 solar_gen=res_CF;clear res_CF
-% 装机容量：74 MW/km²
+% 装机容量：纬度依赖安装密度 161.9×Ω(lat)×FR MW/km²
+pv_density = compute_pv_density(solar_index);
 solar_ins=zeros([13296,1]);
 for ii=1:13296
-    solar_ins(ii)=(74*areas(ii))/1000/1000;%单位 TWp
-    solar_gen(ii,:)=solar_gen(ii,:)*(74*areas(ii))/1000/1000;%单位 TWh
+    solar_ins(ii)=(pv_density(ii)*areas(ii))/1000/1000;%单位 TWp
+    solar_gen(ii,:)=solar_gen(ii,:)*(pv_density(ii)*areas(ii))/1000/1000;%单位 TWh
 end
+clear pv_density
 % 预筛选（presel）：仅保留2050年选中的光伏格网
 solar_index2=find(opt_solar==1);
 [~, loc] = ismember(solar_index2, solar_index);

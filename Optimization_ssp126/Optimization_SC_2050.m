@@ -46,9 +46,9 @@ areas=luccs(win_index).*fish_area(win_index);
 landmask=readgeoraster('Global_LandMask.tif');
 landmask(landmask<100)=0;landmask(landmask>100)=1;
 landmask=landmask(win_index);
-% 计算风电装机容量（TWp）：陆上 2.7 MW/km²，海上 4.6 MW/km²
-wind_ins=(2.7*areas)/1000/1000;%单位 TWp
-wind_ins(landmask==1)=(4.6*areas(landmask==1))/1000/1000;%海上风电密度更高
+% 计算风电装机容量（TWp）：陆上 3.68 MW/km²，海上 6.07 MW/km²
+wind_ins=(3.68*areas)/1000/1000;%单位 TWp
+wind_ins(landmask==1)=(6.07*areas(landmask==1))/1000/1000;%海上风电密度更高
 % 读取风电容量因子时序数据，计算发电量（TWh）
 wind_gen=h5read('Global_Wind_CFs_Sel.h5','/data');
 for ii=1:8477
@@ -85,12 +85,14 @@ fish_area(fish_area<0)=0;
 fish_area=double(fish_area);%km2
 areas=luccs(solar_index).*fish_area(solar_index);
 solar_gen=res_CF;clear res_CF
-% 计算光伏装机容量和发电量：安装密度 74 MW/km²
+% 计算光伏装机容量和发电量：纬度依赖安装密度 161.9×Ω(lat)×FR MW/km²
+pv_density = compute_pv_density(solar_index);
 solar_ins=zeros([13296,1]);
 for ii=1:13296
-    solar_ins(ii)=(74*areas(ii))/1000/1000;%单位 TWp
-    solar_gen(ii,:)=solar_gen(ii,:)*(74*areas(ii))/1000/1000;%单位 TWh
+    solar_ins(ii)=(pv_density(ii)*areas(ii))/1000/1000;%单位 TWp
+    solar_gen(ii,:)=solar_gen(ii,:)*(pv_density(ii)*areas(ii))/1000/1000;%单位 TWh
 end
+clear pv_density
 % 候选格网筛选：
 %   ind1: 装机容量 ≤ 0.001 TWp（过小，排除）
 %   ind2: 年发电量 ≥ 90 TWh（过大，排除）
