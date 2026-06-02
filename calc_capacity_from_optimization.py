@@ -203,15 +203,18 @@ def print_results(result: dict):
 
     # AR6 参考值对比
     print(f"\n  AR6 多模型均值参考（{year}年）：")
+    print(f"    {'SSP':<10}  {'光伏 (GW)':>10} {'中位/AR6':>9} {'均值/AR6':>9}  {'风电 (GW)':>10} {'中位/AR6':>9} {'均值/AR6':>9}")
     for ssp_name, ssp_data in AR6_REFERENCE.items():
         if year in ssp_data:
             ref_s = ssp_data[year]["solar_gw"]
             ref_w = ssp_data[year]["wind_gw"]
-            ratio_s = np.median(solar) / ref_s if ref_s > 0 else float("inf")
-            ratio_w = np.median(wind) / ref_w if ref_w > 0 else float("inf")
+            ratio_med_s = np.median(solar) / ref_s if ref_s > 0 else float("inf")
+            ratio_med_w = np.median(wind) / ref_w if ref_w > 0 else float("inf")
+            ratio_avg_s = np.mean(solar) / ref_s if ref_s > 0 else float("inf")
+            ratio_avg_w = np.mean(wind) / ref_w if ref_w > 0 else float("inf")
             print(
-                f"    {ssp_name:<10}  光伏：{ref_s:>7,} GW（优化/参考 = {ratio_s:.2f}x）"
-                f"  风电：{ref_w:>7,} GW（优化/参考 = {ratio_w:.2f}x）"
+                f"    {ssp_name:<10}  {ref_s:>10,} {ratio_med_s:>8.2f}x {ratio_avg_s:>8.2f}x"
+                f"  {ref_w:>10,} {ratio_med_w:>8.2f}x {ratio_avg_w:>8.2f}x"
             )
 
 
@@ -232,7 +235,11 @@ def print_comparison_table(results: list):
         s_med = np.median(res["solar_gw"])
         w_med = np.median(res["wind_gw"])
         t_med = np.median(res["total_gw"])
-        print(f"  {year:<12} {'优化结果':<18} {s_med:>12,.0f} {w_med:>12,.0f} {t_med:>12,.0f}")
+        s_avg = np.mean(res["solar_gw"])
+        w_avg = np.mean(res["wind_gw"])
+        t_avg = np.mean(res["total_gw"])
+        print(f"  {year:<12} {'优化中位数':<18} {s_med:>12,.0f} {w_med:>12,.0f} {t_med:>12,.0f}")
+        print(f"  {'':<12} {'优化均值':<18} {s_avg:>12,.0f} {w_avg:>12,.0f} {t_avg:>12,.0f}")
 
         for ssp_name in ["SSP1-26", "SSP2-45", "SSP5-60"]:
             ref = AR6_REFERENCE[ssp_name].get(year)
