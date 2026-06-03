@@ -135,7 +135,7 @@ options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[]);
 %     nvars,[],[],[],[],lb,ub,[],intcon,options);
 T = datetime('now');
 disp(T)
-mkdir -p results;  % 确保结果目录存在
+if ~exist('results', 'dir'), mkdir('results'); end  % 确保结果目录存在
 h5create('results/Optimization_SC_2040_Res.h5','/res_scale',size(res_scale));
 h5write('results/Optimization_SC_2040_Res.h5','/res_scale',res_scale);
 h5create('results/Optimization_SC_2040_Res.h5','/prs',size(prs));

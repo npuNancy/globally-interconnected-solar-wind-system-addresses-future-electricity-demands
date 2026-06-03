@@ -158,7 +158,7 @@ disp(T)
 fprintf('优化完成，共 %d 个 Pareto 解\n', size(prs,1));
 
 %% ======================== 10. 保存结果 ========================
-mkdir -p results;  % 确保结果目录存在
+if ~exist('results', 'dir'), mkdir('results'); end  % 确保结果目录存在
 if exist('results/Optimization_SA_2030_Res.h5','file'), delete('results/Optimization_SA_2030_Res.h5'); end
 h5create('results/Optimization_SA_2030_Res.h5','/res_scale',size(res_scale));
 h5write('results/Optimization_SA_2030_Res.h5','/res_scale',res_scale);

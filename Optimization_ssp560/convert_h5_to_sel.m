@@ -204,7 +204,7 @@ opt_trans(trans_mask) = trans_values;
 fprintf('opt_trans 非零数=%d\n', nnz(opt_trans));
 
 %% 9. 保存
-outfile = ['results/' selprefix '_Sel.mat'];  mkdir -p results;
+if ~exist('results', 'dir'), mkdir('results'); end; outfile = ['results/' selprefix '_Sel.mat'];
 save(outfile, 'opt_solar', 'opt_wind', 'opt_stoPow', 'opt_stoCap', 'opt_trans');
 fprintf('\n已保存 %s\n', outfile);
 
