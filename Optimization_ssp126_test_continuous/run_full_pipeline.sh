@@ -1,11 +1,16 @@
 #!/bin/bash
-# run_full_pipeline.sh — SSP1-2.6 三阶段优化自动化流水线
+# run_full_pipeline.sh — SSP1-2.6 连续容量三阶段优化自动化流水线
 # 用法: bash run_full_pipeline.sh
 #
 # 执行顺序：
 #   1. 2050年优化（大陆互联 S-C） → Opt_SC_2050_Sel.mat
 #   2. 2040年优化（大陆互联 S-C） → Opt_SC_2040_Sel.mat
 #   3. 2030年优化（邻近互联 S-A） → Opt_SA_2030_Sel.mat
+#
+# smoke test 模式（缩小搜索规模）：
+#   export CONTINUOUS_POPULATION_SIZE=30
+#   export CONTINUOUS_MAX_GENERATIONS=3
+#   bash run_full_pipeline.sh
 
 set -e
 MATLAB=/data6/yanxiaokai/MATLAB/R2024b/bin/matlab
@@ -26,13 +31,13 @@ run_matlab() {
 }
 
 echo "=========================================="
-echo "  SSP1-2.6 优化流水线"
+echo "  SSP1-2.6 连续容量优化流水线"
 echo "  开始时间：$(date)"
 echo "=========================================="
 
 # 阶段1：2050年优化（大陆互联）
 echo ""
-echo "--- 阶段1：Optimization_SC_2050（2050年，大陆互联） ---"
+echo "--- 阶段1：Optimization_SC_2050（2050年，大陆互联，连续容量） ---"
 if ! run_matlab "Optimization_SC_2050" "$LOGDIR/sc2050.log"; then
     echo "流水线在第1阶段停止"
     exit 1
@@ -40,7 +45,7 @@ fi
 
 # 后处理 2050 -> 生成 Opt_SC_2050_Sel.mat
 echo ""
-echo "--- 后处理：2050 -> Opt_SC_2050_Sel.mat ---"
+echo "--- 后处理：2050 -> Opt_SC_2050_Sel.mat（连续比例栅格） ---"
 if ! run_matlab "year=2050; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2050.log"; then
     echo "流水线在2050后处理阶段停止"
     exit 1
@@ -48,7 +53,7 @@ fi
 
 # 阶段2：2040年优化（大陆互联）
 echo ""
-echo "--- 阶段2：Optimization_SC_2040（2040年，大陆互联） ---"
+echo "--- 阶段2：Optimization_SC_2040（2040年，大陆互联，连续容量） ---"
 if ! run_matlab "Optimization_SC_2040" "$LOGDIR/sc2040.log"; then
     echo "流水线在第2阶段停止"
     exit 1
@@ -56,7 +61,7 @@ fi
 
 # 后处理 2040 -> 生成 Opt_SC_2040_Sel.mat
 echo ""
-echo "--- 后处理：2040 -> Opt_SC_2040_Sel.mat ---"
+echo "--- 后处理：2040 -> Opt_SC_2040_Sel.mat（连续比例栅格） ---"
 if ! run_matlab "year=2040; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2040.log"; then
     echo "流水线在2040后处理阶段停止"
     exit 1
@@ -64,7 +69,7 @@ fi
 
 # 阶段3：2030年优化（邻近互联）
 echo ""
-echo "--- 阶段3：Optimization_SA_2030（2030年，邻近互联） ---"
+echo "--- 阶段3：Optimization_SA_2030（2030年，邻近互联，连续容量） ---"
 if ! run_matlab "Optimization_SA_2030" "$LOGDIR/sa2030.log"; then
     echo "流水线在第3阶段停止"
     exit 1
@@ -72,10 +77,28 @@ fi
 
 # 后处理 2030 -> 生成 Opt_SA_2030_Sel.mat
 echo ""
-echo "--- 后处理：2030 -> Opt_SA_2030_Sel.mat ---"
+echo "--- 后处理：2030 -> Opt_SA_2030_Sel.mat（连续比例栅格） ---"
 if ! run_matlab "year=2030; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2030.log"; then
     echo "流水线在2030后处理阶段停止"
     exit 1
+fi
+
+# 验证
+echo ""
+echo "--- 连续容量结果验证 ---"
+if command -v python3 &> /dev/null; then
+    PYTHON=python3
+else
+    PYTHON=python
+fi
+
+if [ -f "../validate_continuous_results.py" ]; then
+    $PYTHON ../validate_continuous_results.py \
+        --opt-dir "$(pwd)" \
+        --binary-opt-dir "../Optimization_ssp126" \
+        2>&1 | tee "$LOGDIR/validate.log"
+else
+    echo "警告：validate_continuous_results.py 不存在，跳过验证"
 fi
 
 echo ""
