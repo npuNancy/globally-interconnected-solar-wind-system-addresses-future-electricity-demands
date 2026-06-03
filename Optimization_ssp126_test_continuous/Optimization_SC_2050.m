@@ -14,7 +14,7 @@
 %   f(3) = 系统总成本（USD billion, 最小化）
 %
 % 决策变量：
-%   [光伏选址(0/1) | 风电选址(0/1) | 储能功率(20区域) | 储能时长(20区域) | 输电容量(n_trans条链路)]
+%   [光伏开发比例(0~1) | 风电开发比例(0~1) | 储能功率(20区域) | 储能时长(20区域) | 输电容量(n_trans条链路)]
 %
 % 输出：results/Optimization_SC_2050_Res.h5（Pareto 前沿 + 决策向量）
 
@@ -130,9 +130,10 @@ clear global_load
 CGrid_Index=[grid_ind(solar_index);grid_ind(win_index)]; % [区域编号, 选中状态, 陆海标记]
 % 保存非线性约束所需数据（供 nonlcon2050.m 使用）
 nonlcon_sel=CGrid_Index; nonlcon_ins=all_ins;
+nonlcon_ub=ones(length(all_ins),1);  % 2050年所有格网比例上限为1
 nonlsol=length(solar_index); nonlwin=length(win_index);
-save NonlConData nonlcon_sel nonlcon_ins nonlsol nonlwin
-clear nonlcon_sel nonlcon_ins nonlsol nonlwin
+save NonlConData nonlcon_sel nonlcon_ins nonlcon_ub nonlsol nonlwin
+clear nonlcon_sel nonlcon_ins nonlcon_ub nonlsol nonlwin
 % 为风电候选格网添加陆海标记（第3列），用于成本计算区分陆上/海上
 landmask=readgeoraster('Global_LandMask.tif');
 landmask(landmask<100)=0;landmask(landmask>100)=1;
@@ -146,40 +147,82 @@ nvars=length(CGrid_Index);
 load Global_Init_State.mat cur_storage cur_trans
 
 % --- 决策变量上下界 ---
-% 变量结构: [光伏选址(N_solar) | 风电选址(N_wind) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
-lb=zeros(1,nvars);   % 选址变量下界=0（不选）
-ub=ones(1,nvars);    % 选址变量上界=1（选中）
+% 变量结构: [光伏开发比例(N_solar) | 风电开发比例(N_wind) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
+n_grid = length(CGrid_Index);
+lb=zeros(1,n_grid);   % 开发比例变量下界=0（不开发）
+ub=ones(1,n_grid);    % 开发比例变量上界=1（完整开发）
 
 % 储能功率（TW）：下界=当前已有储能，上界=区域峰值负荷×1000（GW）
 al=max(all_loads,[],2);% 各区域峰值负荷（TW）
-lb(nvars+1:nvars+20)=cur_storage/1000;ub(nvars+1:nvars+20)=al*1000;%单位 GW
+lb(n_grid+1:n_grid+20)=cur_storage/1000;ub(n_grid+1:n_grid+20)=al*1000;%单位 GW
 clear cur_storage al
 
 % 储能时长（小时）：下界=2h，上界=72h
-lb(nvars+21:nvars+40)=2;ub(nvars+21:nvars+40)=72;
+lb(n_grid+21:n_grid+40)=2;ub(n_grid+21:n_grid+40)=72;
 
 % 输电容量（GW）：清零跨洲链路的下界（大陆互联模式下不启用跨洲输电）
 % 跨洲链路：北美↔欧洲（6-1, 7-1, 1-6, 1-7）、欧洲↔北美（17-4, 18-4, 4-17, 4-18）
 cur_trans(6,1)=0;cur_trans(7,1)=0;cur_trans(1,6)=0;cur_trans(1,7)=0;
 cur_trans(17,4)=0;cur_trans(18,4)=0;cur_trans(4,17)=0;cur_trans(4,18)=0;
 tmp=cur_trans>0;cur_trans(cur_trans<2)=0;  % 仅保留已有 ≥2 GW 的链路
-lb(nvars+41:nvars+40+sum(tmp(:)))=cur_trans(tmp)/1000;ub(nvars+41:nvars+40+sum(tmp(:)))=10*1000;%输电容量上界 10 TW（GW）
+lb(n_grid+41:n_grid+40+sum(tmp(:)))=cur_trans(tmp)/1000;ub(n_grid+41:n_grid+40+sum(tmp(:)))=10*1000;%输电容量上界 10 TW（GW）
 clear cur_trans
 nvars=length(lb);
-intcon=1:1:length(lb);  % 所有变量均为整数约束
 
-%% ======================== 8. 运行 NSGA-II 优化 ========================
+% 风光比例变量保持连续；储能功率、储能时长和输电容量继续保持整数粒度
+intcon = (n_grid + 1):nvars;
+
+%% ======================== 8. 约束可行性检查 ========================
+load Global_Init_State.mat cur_solar cur_wind
+cur_solar_tw = cur_solar / 1e6;  % MW -> TW
+cur_wind_tw  = cur_wind  / 1e6;
+
+load NonlConData.mat nonlcon_sel nonlcon_ins nonlcon_ub nonlsol nonlwin
+
+solar_max = accumarray( ...
+    nonlcon_sel(1:nonlsol, 1), ...
+    nonlcon_ins(1:nonlsol) .* nonlcon_ub(1:nonlsol), ...
+    [20, 1], @sum, 0);
+
+wind_max = accumarray( ...
+    nonlcon_sel(nonlsol+1:end, 1), ...
+    nonlcon_ins(nonlsol+1:end) .* nonlcon_ub(nonlsol+1:end), ...
+    [20, 1], @sum, 0);
+
+if any(solar_max + 1e-12 < cur_solar_tw) || any(wind_max + 1e-12 < cur_wind_tw)
+    solar_deficit = find(solar_max + 1e-12 < cur_solar_tw);
+    wind_deficit  = find(wind_max + 1e-12 < cur_wind_tw);
+    fprintf('警告：以下区域最大可用容量不足以覆盖已有装机：\n');
+    if ~isempty(solar_deficit)
+        fprintf('  光伏缺口区域：%s\n', num2str(solar_deficit'));
+    end
+    if ~isempty(wind_deficit)
+        fprintf('  风电缺口区域：%s\n', num2str(wind_deficit'));
+    end
+    error('存在无法覆盖已有装机容量的区域，请检查候选格网或父阶段比例上限');
+end
+clear cur_solar cur_wind cur_solar_tw cur_wind_tw solar_max wind_max
+
+%% ======================== 9. 运行 NSGA-II 优化 ========================
+cfg = continuous_config();
+
 T = datetime('now');
 disp(T)
-fprintf('开始2050年优化（大陆互联，种群=1000，代数=200）...\n');
-options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',1000,'MaxGenerations',200);
+fprintf('开始2050年连续容量优化（大陆互联，种群=%d，代数=%d）...\n', ...
+    cfg.POPULATION_SIZE, cfg.MAX_GENERATIONS);
+options = optimoptions('gamultiobj', ...
+    'UseParallel', true, ...
+    'PlotFcn', [], ...
+    'PopulationSize', cfg.POPULATION_SIZE, ...
+    'MaxGenerations', cfg.MAX_GENERATIONS, ...
+    'ConstraintTolerance', cfg.CONSTRAINT_TOL);
 [res_scale,prs]=gamultiobj(@(scale)  OptFun_SC_Dispatch_2050(all_ins,all_gens,all_loads,CGrid_Index,scale),...
     nvars,[],[],[],[],lb,ub,@nonlcon2050,intcon,options);
 T = datetime('now');
 disp(T)
 fprintf('优化完成，共 %d 个 Pareto 解\n', size(prs,1));
 
-%% ======================== 9. 保存结果 ========================
+%% ======================== 10. 保存结果 ========================
 if ~exist('results', 'dir'), mkdir('results'); end  % 确保结果目录存在
 if exist('results/Optimization_SC_2050_Res.h5','file'), delete('results/Optimization_SC_2050_Res.h5'); end
 h5create('results/Optimization_SC_2050_Res.h5','/res_scale',size(res_scale));
@@ -188,7 +231,7 @@ h5create('results/Optimization_SC_2050_Res.h5','/prs',size(prs));
 h5write('results/Optimization_SC_2050_Res.h5','/prs',prs);
 fprintf('结果已保存至 results/Optimization_SC_2050_Res.h5\n');
 
-%% ======================== 10. 关闭并行池 ========================
+%% ======================== 11. 关闭并行池 ========================
 pool = gcp('nocreate');
 if ~isempty(pool)
     delete(pool);

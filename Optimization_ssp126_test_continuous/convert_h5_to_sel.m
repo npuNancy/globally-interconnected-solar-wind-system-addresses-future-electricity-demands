@@ -82,15 +82,18 @@ areas_solar_f = areas(tmp);
 % 计算发电量并筛选：年发电量 < 90 TWh
 pv_density_f = compute_pv_density(solar_index_f);
 solar_gen_f = zeros(sum(tmp), 8760);
+solar_ins_f = zeros(sum(tmp), 1);
 for ii = 1:sum(tmp)
     solar_gen_f(ii,:) = res_CF_scaled(tmp_idx(ii), :) * (pv_density_f(ii) * areas_solar_f(ii)) / 1e6;
+    solar_ins_f(ii) = (pv_density_f(ii) * areas_solar_f(ii)) / 1e6;  % TWp
 end
 clear res_CF_scaled pv_density_f
 annual_gen_solar = sum(solar_gen_f, 2);
 
 tmp3 = annual_gen_solar < 90;
 solar_index = solar_index_f(tmp3);
-clear solar_gen_f annual_gen_solar areas_solar_f solar_ins solar_index_f solar_index_all areas
+solar_ins_selected = solar_ins_f(tmp3);  % 保留候选格网装机容量（TWp）
+clear solar_gen_f annual_gen_solar areas_solar_f solar_ins solar_ins_f solar_index_f solar_index_all areas
 fprintf('2050年光伏候选格网：%d 个\n', length(solar_index));
 
 % --- 风电完整候选列表 ---
@@ -124,10 +127,13 @@ annual_gen_wind = sum(wind_gen_f, 2);
 % 筛选：年发电量 < 10 TWh
 tmp3 = annual_gen_wind < 10;
 win_index = win_index_f(tmp3);
+wind_ins_selected = wind_ins_f(tmp3);  % 保留候选格网装机容量（TWp）
 clear luccs fish_area areas landmask wind_ins wind_gen_all wind_gen_f wind_ins_f win_index_all win_index_f annual_gen_wind
 fprintf('2050年风电候选格网：%d 个\n', length(win_index));
 
 %% 5. 对于 2040/2030，应用上一阶段 Sel 进行预筛选
+cfg = continuous_config();
+
 if year ~= 2050
     if year == 2040
         load('results/Opt_SC_2050_Sel.mat', 'opt_wind', 'opt_solar');  % 2050选中结果
@@ -135,20 +141,29 @@ if year ~= 2050
         load('results/Opt_SC_2040_Sel.mat', 'opt_wind', 'opt_solar');  % 2040选中结果
     end
 
-    % 光伏：从完整2050候选中筛选上一阶段选中的格网
-    [~, pos_s] = ismember(find(opt_solar == 1), solar_index);
+    % 光伏：从完整候选中筛选上一阶段有效开发的格网（比例 > EPS_ACTIVE）
+    solar_frac_parent = opt_solar(opt_solar > cfg.EPS_ACTIVE);
+    solar_idx_parent = find(opt_solar > cfg.EPS_ACTIVE);
+    [~, pos_s] = ismember(solar_idx_parent, solar_index);
     valid_s = pos_s > 0;
     solar_index = solar_index(pos_s(valid_s));
+    solar_ins_selected = solar_ins_selected(pos_s(valid_s));
+    solar_ub = solar_frac_parent(valid_s);  % 父阶段比例作为上限
     N_solar = length(solar_index);
 
-    % 风电：从完整2050候选中筛选上一阶段选中的格网
-    [~, pos_w] = ismember(find(opt_wind == 1), win_index);
+    % 风电：从完整候选中筛选上一阶段有效开发的格网
+    wind_frac_parent = opt_wind(opt_wind > cfg.EPS_ACTIVE);
+    wind_idx_parent = find(opt_wind > cfg.EPS_ACTIVE);
+    [~, pos_w] = ismember(wind_idx_parent, win_index);
     valid_w = pos_w > 0;
     win_index = win_index(pos_w(valid_w));
+    wind_ins_selected = wind_ins_selected(pos_w(valid_w));
+    wind_ub = wind_frac_parent(valid_w);  % 父阶段比例作为上限
     N_wind = length(win_index);
 
     fprintf('预筛选后：光伏=%d，风电=%d\n', N_solar, N_wind);
     clear opt_solar opt_wind pos_s pos_w valid_s valid_w
+    clear solar_frac_parent wind_frac_parent solar_idx_parent wind_idx_parent
 else
     N_solar = length(solar_index);
     N_wind = length(win_index);
@@ -158,21 +173,39 @@ N_grid = N_solar + N_wind;
 fprintf('格网变量总数：%d，变量总数：%d\n', N_grid, nvars_total);
 
 %% 6. 从决策向量提取各分量
-solar_sel = round(scale(1:N_solar));           % 光伏选址（0/1）
-wind_sel  = round(scale(N_solar+1:N_grid));    % 风电选址（0/1）
+solar_frac = scale(1:N_solar);              % 光伏开发比例（0~1）
+wind_frac  = scale(N_solar+1:N_grid);       % 风电开发比例（0~1）
+
+% 裁剪到 [0, 1] 并清理数值噪声
+solar_frac = max(0, min(1, solar_frac));
+wind_frac  = max(0, min(1, wind_frac));
+solar_frac(abs(solar_frac) < cfg.EPS_ACTIVE) = 0;
+wind_frac(abs(wind_frac) < cfg.EPS_ACTIVE) = 0;
+
 opt_stoPow = scale(N_grid+1:N_grid+20);        % 储能功率（GW）
 opt_stoCap = scale(N_grid+21:N_grid+40);       % 储能时长（小时）
 
-fprintf('光伏选中：%d / %d\n', sum(solar_sel), N_solar);
-fprintf('风电选中：%d / %d\n', sum(wind_sel), N_wind);
+n_solar_active = sum(solar_frac > cfg.EPS_ACTIVE);
+n_wind_active  = sum(wind_frac > cfg.EPS_ACTIVE);
+n_solar_partial = sum((solar_frac > cfg.EPS_ACTIVE) & (solar_frac < 1 - cfg.EPS_ACTIVE));
+n_wind_partial  = sum((wind_frac > cfg.EPS_ACTIVE) & (wind_frac < 1 - cfg.EPS_ACTIVE));
+
+fprintf('光伏有效开发：%d / %d（部分开发：%d）\n', n_solar_active, N_solar, n_solar_partial);
+fprintf('风电有效开发：%d / %d（部分开发：%d）\n', n_wind_active, N_wind, n_wind_partial);
 fprintf('储能功率（GW）：[%s]\n', num2str(round(opt_stoPow)));
 fprintf('储能时长（h）：[%s]\n', num2str(round(opt_stoCap)));
 
 %% 7. 映射回 180×360 空间格网
-opt_solar = zeros(180, 360);
-opt_wind  = zeros(180, 360);
-opt_solar(solar_index(solar_sel == 1)) = 1;  % 将选中格网标记为1
-opt_wind(win_index(wind_sel == 1)) = 1;
+opt_solar_frac = zeros(180, 360);
+opt_wind_frac  = zeros(180, 360);
+
+opt_solar_frac(solar_index) = solar_frac(:);
+opt_wind_frac(win_index) = wind_frac(:);
+
+% 兼容旧接口：opt_solar / opt_wind 继续存在，但含义已变为开发比例
+opt_solar = opt_solar_frac;
+opt_wind = opt_wind_frac;
+
 fprintf('opt_solar 非零数=%d, opt_wind 非零数=%d\n', nnz(opt_solar), nnz(opt_wind));
 
 %% 8. 提取传输容量（复制优化脚本的拓扑逻辑）
@@ -203,9 +236,26 @@ opt_trans = zeros(20, 20);
 opt_trans(trans_mask) = trans_values;
 fprintf('opt_trans 非零数=%d\n', nnz(opt_trans));
 
-%% 9. 保存
+%% 9. 计算实际容量栅格并保存
+% 实际装机容量 = 最大技术潜力 × 开发比例
+opt_solar_cap_twp = zeros(180, 360);
+opt_wind_cap_twp  = zeros(180, 360);
+
+opt_solar_cap_twp(solar_index) = solar_ins_selected(:) .* solar_frac(:);
+opt_wind_cap_twp(win_index)  = wind_ins_selected(:) .* wind_frac(:);
+
+% 元数据
+selection_mode = 'continuous_fraction';
+eps_active = cfg.EPS_ACTIVE;
+
 if ~exist('results', 'dir'), mkdir('results'); end; outfile = ['results/' selprefix '_Sel.mat'];
-save(outfile, 'opt_solar', 'opt_wind', 'opt_stoPow', 'opt_stoCap', 'opt_trans');
+save(outfile, ...
+    'opt_solar', 'opt_wind', ...
+    'opt_solar_frac', 'opt_wind_frac', ...
+    'opt_solar_cap_twp', 'opt_wind_cap_twp', ...
+    'opt_stoPow', 'opt_stoCap', 'opt_trans', ...
+    'selection_mode', 'eps_active', ...
+    'year', 'sol_idx');
 fprintf('\n已保存 %s\n', outfile);
 
 %% 10. Pareto 前沿概览

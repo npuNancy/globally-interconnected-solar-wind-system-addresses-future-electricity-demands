@@ -6,7 +6,7 @@ function f = OptFun_SC_Dispatch_2050(ins_cap,gens,loads,CGrid_Index,scale)
 %   gens        - 候选格网发电时序矩阵（TWh, 8760h）
 %   loads       - 20区域负荷时序矩阵（TW, 8760h）
 %   CGrid_Index - 候选格网区域索引矩阵 [区域编号, 选中状态, 陆海标记]
-%   scale       - 决策向量 [选址(0/1) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
+%   scale       - 决策向量 [开发比例(0~1) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
 %
 % 输出：
 %   f(1) - 弃电率（curtailment rate）
@@ -14,14 +14,17 @@ function f = OptFun_SC_Dispatch_2050(ins_cap,gens,loads,CGrid_Index,scale)
 %   f(3) - 系统总成本（十亿美元）
 
 %% ======================== 1. 计算各区域发电曲线 ========================
-% 根据选址结果（scale前N_grid个0/1变量），汇总每个区域的总发电功率
-CGrid_Index(:,2)=round(scale(1:length(CGrid_Index)));
-grid_gens=zeros(20,8760);
-for gg_ind=1:20
-    index=find((CGrid_Index(:,1)==gg_ind)&(CGrid_Index(:,2)==1));
-    selgens=gens(index,:);
-    grid_gens(gg_ind,:)=nansum(selgens,1);
-end
+% 按格网开发比例缩放逐小时出力并聚合到20区域
+n_grid = size(CGrid_Index, 1);
+
+[grid_gens, effective_ins, site_frac] = ...
+    aggregate_fractional_generation( ...
+        ins_cap, ...
+        gens, ...
+        CGrid_Index(:, 1), ...
+        scale(1:n_grid), ...
+        20 ...
+    );
 
 %% ======================== 2. 扣除基荷发电（非可再生调度电源） ========================
 % AR6 SSP1-2.6 情景下，2050年基荷发电占44.6%
@@ -141,42 +144,56 @@ for time_ind=1:8760
 end
 
 %% ======================== 7. 计算系统总成本 ========================
+% 成本基于实际建设容量 effective_ins = ins_cap .* site_frac
 load NonlConData.mat nonlsol
-obj_cost=0;
-% 海上风电：全球统一成本 3461 $/kW → 3461 十亿美元/TW
-index=find((CGrid_Index(:,3)==1)&(CGrid_Index(:,2)==1));
-obj_cost=obj_cost+3461*sum(ins_cap(index(index>nonlsol)));
 
-% 陆上风电/光伏：各区域差异化成本（低于 nonlsol 阈值的为光伏，高于的为风电）
+n_grid = length(ins_cap);
+is_solar = ((1:n_grid).' <= nonlsol);
+is_wind  = ~is_solar;
+
+is_offshore = is_wind & (CGrid_Index(:, 3) == 1);
+is_onshore  = is_wind & (CGrid_Index(:, 3) == 0);
+
+obj_cost = 0;
+
+% 海上风电：全球统一成本 3461 $/kW → 3461 十亿美元/TW
+obj_cost = obj_cost + 3461 * sum(effective_ins(is_offshore));
+
 % 亚洲（区域9-13）
-index=find((CGrid_Index(:,1)>8)&(CGrid_Index(:,1)<14)&(CGrid_Index(:,2)==1)&(CGrid_Index(:,3)==0));
-obj_cost=obj_cost+927.6*sum(ins_cap(index(index<=nonlsol)));   % 光伏
-obj_cost=obj_cost+1313*sum(ins_cap(index(index>nonlsol)));     % 陆上风电
+is_region = (CGrid_Index(:,1) > 8) & (CGrid_Index(:,1) < 14);
+obj_cost = obj_cost ...
+    + 927.6 * sum(effective_ins(is_solar & is_region)) ...
+    + 1313  * sum(effective_ins(is_onshore & is_region));
 
 % 北美（区域1）
-index=find((CGrid_Index(:,1)==1)&(CGrid_Index(:,2)==1)&(CGrid_Index(:,3)==0));
-obj_cost=obj_cost+1012.6*sum(ins_cap(index(index<=nonlsol)));
-obj_cost=obj_cost+1284.8*sum(ins_cap(index(index>nonlsol)));
+is_region = (CGrid_Index(:,1) == 1);
+obj_cost = obj_cost ...
+    + 1012.6 * sum(effective_ins(is_solar & is_region)) ...
+    + 1284.8 * sum(effective_ins(is_onshore & is_region));
 
 % 欧洲（区域5-8）
-index=find((CGrid_Index(:,1)>4)&(CGrid_Index(:,1)<9)&(CGrid_Index(:,2)==1)&(CGrid_Index(:,3)==0));
-obj_cost=obj_cost+1075.9*sum(ins_cap(index(index<=nonlsol)));
-obj_cost=obj_cost+1650.4*sum(ins_cap(index(index>nonlsol)));
+is_region = (CGrid_Index(:,1) > 4) & (CGrid_Index(:,1) < 9);
+obj_cost = obj_cost ...
+    + 1075.9 * sum(effective_ins(is_solar & is_region)) ...
+    + 1650.4 * sum(effective_ins(is_onshore & is_region));
 
 % 拉丁美洲（区域2-4）
-index=find((CGrid_Index(:,1)>1)&(CGrid_Index(:,1)<5)&(CGrid_Index(:,2)==1)&(CGrid_Index(:,3)==0));
-obj_cost=obj_cost+861.4*sum(ins_cap(index(index<=nonlsol)));
-obj_cost=obj_cost+1499.4*sum(ins_cap(index(index>nonlsol)));
+is_region = (CGrid_Index(:,1) > 1) & (CGrid_Index(:,1) < 5);
+obj_cost = obj_cost ...
+    + 861.4 * sum(effective_ins(is_solar & is_region)) ...
+    + 1499.4 * sum(effective_ins(is_onshore & is_region));
 
 % 非洲（区域16-20）
-index=find((CGrid_Index(:,1)>15)&(CGrid_Index(:,1)<21)&(CGrid_Index(:,2)==1)&(CGrid_Index(:,3)==0));
-obj_cost=obj_cost+1256.6*sum(ins_cap(index(index<=nonlsol)));
-obj_cost=obj_cost+1684.7*sum(ins_cap(index(index>nonlsol)));
+is_region = (CGrid_Index(:,1) > 15) & (CGrid_Index(:,1) < 21);
+obj_cost = obj_cost ...
+    + 1256.6 * sum(effective_ins(is_solar & is_region)) ...
+    + 1684.7 * sum(effective_ins(is_onshore & is_region));
 
 % 大洋洲（区域14-15）
-index=find((CGrid_Index(:,1)>13)&(CGrid_Index(:,1)<16)&(CGrid_Index(:,2)==1)&(CGrid_Index(:,3)==0));
-obj_cost=obj_cost+922.5*sum(ins_cap(index(index<=nonlsol)));
-obj_cost=obj_cost+1360.7*sum(ins_cap(index(index>nonlsol)));
+is_region = (CGrid_Index(:,1) > 13) & (CGrid_Index(:,1) < 16);
+obj_cost = obj_cost ...
+    + 922.5 * sum(effective_ins(is_solar & is_region)) ...
+    + 1360.7 * sum(effective_ins(is_onshore & is_region));
 
 % 输电成本：98 十亿美元/TW
 trans_power=zeros(20,20);
