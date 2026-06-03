@@ -145,7 +145,7 @@ obj_cost=obj_cost+1684.7*sum(ins_cap(index(index>nonlsol)));
 
 index=find((CGrid_Index(:,1)>13)&(CGrid_Index(:,1)<16)&(CGrid_Index(:,2)==1)&(CGrid_Index(:,3)==0));  % 大洋洲
 obj_cost=obj_cost+922.5*sum(ins_cap(index(index<=nonlsol)));
-obj_cost=obj_cost+136.07*sum(ins_cap(index(index>nonlsol)));
+obj_cost=obj_cost+1360.7*sum(ins_cap(index(index>nonlsol)));
 
 trans_power=zeros(20,20);
 trans_power(trans_connections==1)=scale(length(CGrid_Index)+41:end)/1000;
