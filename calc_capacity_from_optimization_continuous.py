@@ -77,16 +77,18 @@ def _build_capacity_grids(opt_dir):
     """构建 180×360 光伏/风电最大可安装装机容量栅格（GW）。
 
     容量 = 安装密度(MW/km²) × 可用面积比例 × 格网面积(km²) / 1000
+    光伏：纬度依赖密度；风电：陆上 3.68 / 海上 6.07 MW/km²
     """
+    from density_config import build_solar_capacity_gw, build_wind_capacity_gw
+
     solar_luccs = sio.loadmat(os.path.join(opt_dir, "Global_Solar_Net_Area_Add_Egrid.mat"))["data"] / 100.0
     solar_area = sio.loadmat(os.path.join(opt_dir, "Global_Solar_Fishnet_Area.mat"))["data"].astype(float)
-    solar_cap = 74 * solar_luccs * solar_area / 1000
+    solar_cap = build_solar_capacity_gw(solar_luccs, solar_area)
 
     wind_luccs = sio.loadmat(os.path.join(opt_dir, "Global_Wind_Net_Area_Add_Egrid.mat"))["data"] / 100.0
     wind_area = sio.loadmat(os.path.join(opt_dir, "Global_Wind_Fishnet_Area.mat"))["data"]
     landmask = sio.loadmat(os.path.join(opt_dir, "Global_LandMask.mat"))["data"]
-    density = np.where(landmask > 100, 4.6, 2.7)
-    wind_cap = density * wind_luccs * wind_area / 1000
+    wind_cap = build_wind_capacity_gw(wind_luccs, wind_area, landmask)
 
     return solar_cap, wind_cap
 

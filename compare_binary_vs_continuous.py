@@ -27,12 +27,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 BINARY_DIR = PROJECT_ROOT / "Optimization_ssp126"
 CONTINUOUS_DIR = PROJECT_ROOT / "Optimization_ssp126_test_continuous"
 
-# Installation densities (MW/km^2)
-SOLAR_DENSITY = 74.0          # solar PV
-WIND_ONSHORE_DENSITY = 2.7    # onshore wind
-WIND_OFFSHORE_DENSITY = 4.6   # offshore wind
-
 EPS_ACTIVE = 1e-6             # threshold for "active" grid cell
+
+from density_config import build_solar_capacity_gw, build_wind_capacity_gw
 
 # File-name patterns per year: (sel_mat_prefix, year)
 YEAR_CONFIG = {
@@ -106,13 +103,10 @@ def _build_capacity_grids():
     wind_cap_grid  : ndarray (180, 360) – wind  capacity in GW
     """
     solar_area_km2, solar_avail_frac, wind_area_km2, wind_avail_frac, ocean_mask = _load_grid_data()
+    landmask_raw = sio.loadmat(BINARY_DIR / "Global_LandMask.mat")["data"]
 
-    # Solar: density * available_fraction * grid_area / 1000 → GW
-    solar_cap_grid = SOLAR_DENSITY * solar_avail_frac * solar_area_km2 / 1000.0
-
-    # Wind: onshore vs offshore density
-    wind_density = np.where(ocean_mask, WIND_OFFSHORE_DENSITY, WIND_ONSHORE_DENSITY)
-    wind_cap_grid = wind_density * wind_avail_frac * wind_area_km2 / 1000.0
+    solar_cap_grid = build_solar_capacity_gw(solar_avail_frac, solar_area_km2)
+    wind_cap_grid = build_wind_capacity_gw(wind_avail_frac, wind_area_km2, landmask_raw)
 
     return solar_cap_grid, wind_cap_grid
 

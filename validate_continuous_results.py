@@ -30,11 +30,7 @@ TOL = 1e-8
 RTOL = 1e-4
 EPS_ACTIVE = 1e-6
 
-# Solar/wind installation densities
-SOLAR_DENSITY_MW_KM2 = 74.0     # MW/km²
-WIND_ONSHORE_DENSITY_MW_KM2 = 2.7
-WIND_OFFSHORE_DENSITY_MW_KM2 = 4.6
-LANDMASK_THRESHOLD = 100         # >100 = onshore
+from density_config import build_solar_capacity_gw, build_wind_capacity_gw
 
 # Required result files per year
 YEAR_FILES = {
@@ -245,8 +241,8 @@ class ValidationReport:
 def build_capacity_grids(opt_dir):
     """Build 180x360 solar/wind max capacity grids (GW).
 
-    Solar: 74 MW/km² × available_area_fraction × grid_area_km² / 1000 → GW
-    Wind:  (2.7 onshore / 4.6 offshore) MW/km² × available_area_fraction × grid_area_km² / 1000 → GW
+    Solar: latitude-dependent density × available_area_fraction × grid_area_km² / 1000 → GW
+    Wind:  (3.68 onshore / 6.07 offshore) MW/km² × available_area_fraction × grid_area_km² / 1000 → GW
     """
     solar_luccs = sio.loadmat(
         os.path.join(opt_dir, "Global_Solar_Net_Area_Add_Egrid.mat")
@@ -254,7 +250,7 @@ def build_capacity_grids(opt_dir):
     solar_area = sio.loadmat(
         os.path.join(opt_dir, "Global_Solar_Fishnet_Area.mat")
     )["data"].astype(float)
-    solar_cap_gw = SOLAR_DENSITY_MW_KM2 * solar_luccs * solar_area / 1000.0
+    solar_cap_gw = build_solar_capacity_gw(solar_luccs, solar_area)
 
     wind_luccs = sio.loadmat(
         os.path.join(opt_dir, "Global_Wind_Net_Area_Add_Egrid.mat")
@@ -265,10 +261,7 @@ def build_capacity_grids(opt_dir):
     landmask = sio.loadmat(
         os.path.join(opt_dir, "Global_LandMask.mat")
     )["data"]
-    density = np.where(landmask > LANDMASK_THRESHOLD,
-                       WIND_OFFSHORE_DENSITY_MW_KM2,
-                       WIND_ONSHORE_DENSITY_MW_KM2)
-    wind_cap_gw = density * wind_luccs * wind_area / 1000.0
+    wind_cap_gw = build_wind_capacity_gw(wind_luccs, wind_area, landmask)
 
     return solar_cap_gw, wind_cap_gw
 
