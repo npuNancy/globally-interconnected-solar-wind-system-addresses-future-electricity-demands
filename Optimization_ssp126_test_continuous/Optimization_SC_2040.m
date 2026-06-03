@@ -177,17 +177,47 @@ wind_max = accumarray( ...
     nonlcon_ins(nonlsol+1:end) .* nonlcon_ub(nonlsol+1:end), ...
     [20, 1], @sum, 0);
 
-if any(solar_max + 1e-12 < cur_solar_tw) || any(wind_max + 1e-12 < cur_wind_tw)
-    solar_deficit = find(solar_max + 1e-12 < cur_solar_tw);
-    wind_deficit  = find(wind_max + 1e-12 < cur_wind_tw);
-    fprintf('警告：以下区域最大可用容量不足以覆盖已有装机：\n');
-    if ~isempty(solar_deficit)
-        fprintf('  光伏缺口区域：%s\n', num2str(solar_deficit'));
+% 若父阶段比例上限不足以覆盖已有装机，自动提升下限以确保可行性
+n_adjusted = 0;
+for r = 1:20
+    % 光伏
+    r_solar = find(nonlcon_sel(1:nonlsol, 1) == r);
+    if ~isempty(r_solar)
+        total_ins_s = sum(nonlcon_ins(r_solar));
+        if total_ins_s > 0
+            needed_frac_s = cur_solar_tw(r) / total_ins_s;
+            r_max_s = sum(nonlcon_ins(r_solar) .* nonlcon_ub(r_solar));
+            if r_max_s + 1e-12 < cur_solar_tw(r)
+                nonlcon_ub(r_solar) = max(nonlcon_ub(r_solar), needed_frac_s);
+                ub(r_solar) = max(ub(r_solar), needed_frac_s);
+                n_adjusted = n_adjusted + 1;
+                fprintf('  区域 %d 光伏：提升比例下限至 %.4f（需要 %.4f TW，原有上限 %.4f TW）\n', ...
+                    r, needed_frac_s, cur_solar_tw(r), r_max_s);
+            end
+        end
     end
-    if ~isempty(wind_deficit)
-        fprintf('  风电缺口区域：%s\n', num2str(wind_deficit'));
+    % 风电
+    r_wind = find(nonlcon_sel(nonlsol+1:end, 1) == r);
+    if ~isempty(r_wind)
+        total_ins_w = sum(nonlcon_ins(nonlsol + r_wind));
+        if total_ins_w > 0
+            needed_frac_w = cur_wind_tw(r) / total_ins_w;
+            r_max_w = sum(nonlcon_ins(nonlsol + r_wind) .* nonlcon_ub(nonlsol + r_wind));
+            if r_max_w + 1e-12 < cur_wind_tw(r)
+                nonlcon_ub(nonlsol + r_wind) = max(nonlcon_ub(nonlsol + r_wind), needed_frac_w);
+                ub(nonlsol + r_wind) = max(ub(nonlsol + r_wind), needed_frac_w);
+                n_adjusted = n_adjusted + 1;
+                fprintf('  区域 %d 风电：提升比例下限至 %.4f（需要 %.4f TW，原有上限 %.4f TW）\n', ...
+                    r, needed_frac_w, cur_wind_tw(r), r_max_w);
+            end
+        end
     end
-    error('存在无法覆盖已有装机容量的区域，请检查候选格网或父阶段比例上限');
+end
+if n_adjusted > 0
+    save NonlConData2040 nonlcon_sel nonlcon_ins nonlcon_ub nonlsol nonlwin
+    fprintf('已调整 %d 个区域/类型的比例下限并重新保存约束数据\n', n_adjusted);
+else
+    fprintf('约束可行性检查通过：所有区域最大可用容量均覆盖已有装机\n');
 end
 clear cur_solar cur_wind cur_solar_tw cur_wind_tw solar_max wind_max
 
