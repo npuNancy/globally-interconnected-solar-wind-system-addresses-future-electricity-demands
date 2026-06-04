@@ -1,12 +1,13 @@
-function f = OptFun_SC_Dispatch_2040(ins_cap,gens,loads,CGrid_Index,scale)
+function f = OptFun_SC_Dispatch_2040(ins_cap,gens,loads,CGrid_Index,scale,base_load_ratio)
 % OptFun_SC_Dispatch_2040 — 2040年调度模拟与目标函数（大陆互联 S-C）
 %
 % 输入：
-%   ins_cap     - 候选格网装机容量向量（TWp）
-%   gens        - 候选格网发电时序矩阵（TWh, 8760h）
-%   loads       - 20区域负荷时序矩阵（TW, 8760h）
-%   CGrid_Index - 候选格网区域索引矩阵 [区域编号, 选中状态, 陆海标记]
-%   scale       - 决策向量 [选址(0/1) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
+%   ins_cap           - 候选格网装机容量向量（TWp）
+%   gens              - 候选格网发电时序矩阵（TWh, 8760h）
+%   loads             - 20区域负荷时序矩阵（TW, 8760h）
+%   CGrid_Index       - 候选格网区域索引矩阵 [区域编号, 选中状态, 陆海标记]
+%   scale             - 决策向量 [选址(0/1) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
+%   base_load_ratio   - 基荷比例（来自 optimization_config.m）
 %
 % 输出：
 %   f(1) - 弃电率（curtailment rate）
@@ -27,7 +28,7 @@ end
 grid_load=loads;
 for gg_ind=1:20
     tmp=grid_load(gg_ind,:);
-    tmp=tmp-sum(tmp)*0.375/8760;  % 基荷占比37.5%
+    tmp=tmp-sum(tmp)*base_load_ratio/8760;  % 基荷比例由参数传入
     grid_load(gg_ind,:)=tmp;
 end
 

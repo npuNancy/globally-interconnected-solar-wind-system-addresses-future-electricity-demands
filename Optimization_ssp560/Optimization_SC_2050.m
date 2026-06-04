@@ -19,6 +19,7 @@
 % 输出：results/Optimization_SC_2050_Res.h5（Pareto 前沿 + 决策向量）
 
 clear,clc
+run('optimization_config.m');
 
 %% ======================== 1. 启动并行计算池 ========================
 try
@@ -121,7 +122,7 @@ load Global_Load_22region.mat
 all_loads=squeeze(all_loads(4,:,:))/1000/1000;%单位 TW
 global_load=sum(all_loads,1);
 % 将负荷总量缩放至 AR6 SSP5-6.0 的 65,277 TWh，保持小时形状和区域分布不变
-all_loads=all_loads/(sum(global_load(:))/65277);
+all_loads=all_loads/(sum(global_load(:))/DEMAND_2050);
 clear global_load
 
 %% ======================== 6. 构建区域索引和约束数据 ========================
@@ -171,9 +172,9 @@ intcon=1:1:length(lb);  % 所有变量均为整数约束
 %% ======================== 8. 运行 NSGA-II 优化 ========================
 T = datetime('now');
 disp(T)
-fprintf('开始2050年优化（大陆互联，种群=1000，代数=200）...\n');
-options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',1000,'MaxGenerations',200);
-[res_scale,prs]=gamultiobj(@(scale)  OptFun_SC_Dispatch_2050(all_ins,all_gens,all_loads,CGrid_Index,scale),...
+fprintf('开始2050年优化（大陆互联，种群=%d，代数=%d）...\n', POPULATION_SIZE, MAX_GENERATIONS);
+options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',POPULATION_SIZE,'MaxGenerations',MAX_GENERATIONS);
+[res_scale,prs]=gamultiobj(@(scale)  OptFun_SC_Dispatch_2050(all_ins,all_gens,all_loads,CGrid_Index,scale,BASE_LOAD_RATIO_2050),...
     nvars,[],[],[],[],lb,ub,@nonlcon2050,intcon,options);
 T = datetime('now');
 disp(T)

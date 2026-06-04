@@ -20,6 +20,7 @@
 % 输出：results/Optimization_SA_2030_Res.h5
 
 clear,clc
+run('optimization_config.m');
 
 %% ======================== 1. 启动并行计算池 ========================
 try
@@ -100,7 +101,7 @@ load Global_Load_22region.mat
 all_loads=squeeze(all_loads(2,:,:))/1000/1000;%单位 TW
 global_load=sum(all_loads,1);
 % 缩放至 AR6 SSP5-6.0 的 40,483 TWh
-all_loads=all_loads/(sum(global_load(:))/40483);
+all_loads=all_loads/(sum(global_load(:))/DEMAND_2030);
 clear global_load
 
 %% ======================== 7. 构建区域索引和约束数据 ========================
@@ -148,10 +149,10 @@ intcon=1:1:length(lb);
 %% ======================== 9. 运行 NSGA-II 优化 ========================
 T = datetime('now');
 disp(T)
-fprintf('开始2030年优化（邻近互联，种群=1000，代数=200，约束容差=8）...\n');
+fprintf('开始2030年优化（邻近互联，种群=%d，代数=%d，约束容差=8）...\n', POPULATION_SIZE, MAX_GENERATIONS);
 % ConstraintTolerance=8：允许风电约束违反≤8个区域
-options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',1000,'MaxGenerations',200,'ConstraintTolerance',8);
-[res_scale,prs]=gamultiobj(@(scale)  OptFun_SA_Dispatch_2030(all_ins,all_gens,all_loads,CGrid_Index,scale),...
+options = optimoptions('gamultiobj','UseParallel',true,'PlotFcn',[],'PopulationSize',POPULATION_SIZE,'MaxGenerations',MAX_GENERATIONS,'ConstraintTolerance',8);
+[res_scale,prs]=gamultiobj(@(scale)  OptFun_SA_Dispatch_2030(all_ins,all_gens,all_loads,CGrid_Index,scale,BASE_LOAD_RATIO_2030),...
     nvars,[],[],[],[],lb,ub,@nonlcon2030,intcon,options);
 T = datetime('now');
 disp(T)

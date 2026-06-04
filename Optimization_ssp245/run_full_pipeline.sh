@@ -2,6 +2,10 @@
 # run_full_pipeline.sh — SSP2-4.5 三阶段优化自动化流水线
 # 用法: bash run_full_pipeline.sh
 #
+# 环境变量配置（可选）：
+#   export POPULATION_SIZE=30    # NSGA-II 种群大小，默认 1000
+#   export MAX_GENERATIONS=3     # NSGA-II 最大代数，默认 200
+#
 # 执行顺序：
 #   1. 2050年优化（大陆互联 S-C） → Opt_SC_2050_Sel.mat
 #   2. 2040年优化（大陆互联 S-C） → Opt_SC_2040_Sel.mat

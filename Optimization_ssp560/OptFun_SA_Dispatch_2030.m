@@ -1,4 +1,4 @@
-function f = OptFun_SA_Dispatch_2030(ins_cap,gens,loads,CGrid_Index,scale)
+function f = OptFun_SA_Dispatch_2030(ins_cap,gens,loads,CGrid_Index,scale,base_load_ratio)
 % OptFun_SA_Dispatch_2030 — 2030年调度模拟与目标函数（邻近互联 S-A）
 %
 % 与 S-C（大陆互联）的区别：
@@ -6,11 +6,12 @@ function f = OptFun_SA_Dispatch_2030(ins_cap,gens,loads,CGrid_Index,scale)
 %   - 基荷占比更高（78.8%），可再生能源渗透空间更小
 %
 % 输入：
-%   ins_cap     - 候选格网装机容量向量（TWp）
-%   gens        - 候选格网发电时序矩阵（TWh, 8760h）
-%   loads       - 20区域负荷时序矩阵（TW, 8760h）
-%   CGrid_Index - 候选格网区域索引矩阵 [区域编号, 选中状态, 陆海标记]
-%   scale       - 决策向量 [选址(0/1) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
+%   ins_cap           - 候选格网装机容量向量（TWp）
+%   gens              - 候选格网发电时序矩阵（TWh, 8760h）
+%   loads             - 20区域负荷时序矩阵（TW, 8760h）
+%   CGrid_Index       - 候选格网区域索引矩阵 [区域编号, 选中状态, 陆海标记]
+%   scale             - 决策向量 [选址(0/1) | 储能功率(20) | 储能时长(20) | 输电容量(n_trans)]
+%   base_load_ratio   - 基荷比例（来自 optimization_config.m）
 %
 % 输出：
 %   f(1) - 弃电率
@@ -31,7 +32,7 @@ end
 grid_load=loads;
 for gg_ind=1:20
     tmp=grid_load(gg_ind,:);
-    tmp=tmp-sum(tmp)*0.788/8760;  % 基荷占比78.8%
+    tmp=tmp-sum(tmp)*base_load_ratio/8760;  % 基荷比例由参数传入
     grid_load(gg_ind,:)=tmp;
 end
 
