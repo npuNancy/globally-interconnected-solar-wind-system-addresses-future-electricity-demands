@@ -23,11 +23,11 @@ for gg_ind=1:20
 end
 
 %% ======================== 2. 扣除基荷发电 ========================
-% AR6 SSP1-2.6 情景下，2040年基荷发电占56.9%
+% AR6 SSP1-2.6 情景下，2040年基荷发电占37.5%
 grid_load=loads;
 for gg_ind=1:20
     tmp=grid_load(gg_ind,:);
-    tmp=tmp-sum(tmp)*0.569/8760;  % 基荷占比56.9%
+    tmp=tmp-sum(tmp)*0.375/8760;  % 基荷占比37.5%
     grid_load(gg_ind,:)=tmp;
 end
 

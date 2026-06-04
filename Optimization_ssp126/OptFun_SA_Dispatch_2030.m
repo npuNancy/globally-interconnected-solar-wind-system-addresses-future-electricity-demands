@@ -3,7 +3,7 @@ function f = OptFun_SA_Dispatch_2030(ins_cap,gens,loads,CGrid_Index,scale)
 %
 % 与 S-C（大陆互联）的区别：
 %   - maxNodes=2：仅允许相邻区域直接输电（1跳），不允许中继
-%   - 基荷占比更高（73.7%），可再生能源渗透空间更小
+%   - 基荷占比更高（55.8%），可再生能源渗透空间更小
 %
 % 输入：
 %   ins_cap     - 候选格网装机容量向量（TWp）
@@ -27,11 +27,11 @@ for gg_ind=1:20
 end
 
 %% ======================== 2. 扣除基荷发电 ========================
-% AR6 SSP1-2.6 情景下，2030年基荷发电占73.7%
+% AR6 SSP1-2.6 情景下，2030年基荷发电占55.8%
 grid_load=loads;
 for gg_ind=1:20
     tmp=grid_load(gg_ind,:);
-    tmp=tmp-sum(tmp)*0.737/8760;  % 基荷占比73.7%
+    tmp=tmp-sum(tmp)*0.558/8760;  % 基荷占比55.8%
     grid_load(gg_ind,:)=tmp;
 end
 
