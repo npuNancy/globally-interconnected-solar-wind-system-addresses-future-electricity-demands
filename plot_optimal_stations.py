@@ -2,11 +2,11 @@
 """
 未来风光场站选址可视化
 
-参考 optimal_stations_viz.ipynb，对不同 SSP 情景下 2030/2040/2050 年
+参考 plot_optimal_stations.ipynb，对不同 SSP 情景下 2030/2040/2050 年
 光伏和风电场站选址结果进行可视化（上: 光伏，下: 风电）。
 
 用法:
-    python wind_farm_viz.py
+    python plot_optimal_stations.py
 """
 
 import os
@@ -115,9 +115,7 @@ def get_stations(data_dir, year):
     """
     mat_path = _find_file(data_dir, MAT_PATTERNS[year])
     if mat_path is None:
-        raise FileNotFoundError(
-            f"{year} 年选择文件未找到，期望：{MAT_PATTERNS[year]}（目录：{data_dir}）"
-        )
+        raise FileNotFoundError(f"{year} 年选择文件未找到，期望：{MAT_PATTERNS[year]}（目录：{data_dir}）")
     return extract_stations_from_mat(mat_path)
 
 
@@ -152,9 +150,7 @@ def get_stations_with_cap(data_dir, year, solar_cap, wind_cap):
     """
     mat_path = _find_file(data_dir, MAT_PATTERNS[year])
     if mat_path is None:
-        raise FileNotFoundError(
-            f"{year} 年选择文件未找到，期望：{MAT_PATTERNS[year]}（目录：{data_dir}）"
-        )
+        raise FileNotFoundError(f"{year} 年选择文件未找到，期望：{MAT_PATTERNS[year]}（目录：{data_dir}）")
 
     mat = scipy.io.loadmat(mat_path)
     opt_solar, opt_wind = mat["opt_solar"], mat["opt_wind"]
