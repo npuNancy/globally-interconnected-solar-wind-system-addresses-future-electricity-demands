@@ -211,10 +211,6 @@ fprintf('\n已保存 %s\n', outfile);
 %% 10. Pareto 前沿概览
 fprintf('\n=== Pareto 前沿（%d 个解） ===\n', n_solutions);
 fprintf('%5s %10s %10s %12s\n', '编号', '弃电率', '渗透率', '成本(十亿$)');
-for i = 1:min(n_solutions, 20)
+for i = 1:n_solutions
     fprintf('%5d %10.4f %10.4f %12.1f\n', i, prs(i,1), 1-prs(i,2), prs(i,3));
-end
-if n_solutions > 20
-    fprintf('  ... （共 %d 个解，此处省略）\n', n_solutions - 20);
-    fprintf('%5d %10.4f %10.4f %12.1f\n', n_solutions, prs(n_solutions,1), 1-prs(n_solutions,2), prs(n_solutions,3));
 end
