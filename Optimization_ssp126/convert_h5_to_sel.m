@@ -14,7 +14,20 @@
 if ~exist('year', 'var'), year = 2050; end
 if ~exist('sol_idx', 'var'), sol_idx = 0; end
 
-fprintf('=== h5 转 Sel：year=%d, sol_idx=%d ===\n', year, sol_idx);
+%% 加载当前 SSP 情景配置
+run('optimization_config.m');
+switch year
+    case 2050
+        base_load_ratio = BASE_LOAD_RATIO_2050;
+    case 2040
+        base_load_ratio = BASE_LOAD_RATIO_2040;
+    case 2030
+        base_load_ratio = BASE_LOAD_RATIO_2030;
+    otherwise
+        error('year 必须为 2030、2040 或 2050');
+end
+
+fprintf('=== h5 转 Sel：year=%d, sol_idx=%d, base_load_ratio=%.3f ===\n', year, sol_idx, base_load_ratio);
 
 %% 1. 确定文件名和前缀
 switch year
@@ -44,8 +57,11 @@ if sol_idx == 0
     fprintf('自动选择第 %d 个解（共 %d 个的中间位置）\n', sol_idx, n_solutions);
 end
 scale = res_scale(sol_idx, :);
-fprintf('解 %d：弃电率=%.4f, 渗透率=%.4f, 成本=%.0f 十亿美元\n', ...
-    sol_idx, prs(sol_idx,1), 1-prs(sol_idx,2), prs(sol_idx,3));
+flexible_ratio = prs(sol_idx, 2);
+total_coverage_ratio = 1 - flexible_ratio;
+solar_wind_penetration = 1 - base_load_ratio - flexible_ratio;
+fprintf('解 %d：弃电率=%.4f, 风光渗透率=%.4f, 总覆盖率=%.4f, 灵活电源比例=%.4f, 成本=%.0f 十亿美元\n', ...
+    sol_idx, prs(sol_idx,1), solar_wind_penetration, total_coverage_ratio, flexible_ratio, prs(sol_idx,3));
 
 %% 4. 重建候选格网索引
 
@@ -183,7 +199,7 @@ load Global_Trans trans_connections trans_loss
 cur_trans(6,1)=0;cur_trans(7,1)=0;cur_trans(1,6)=0;cur_trans(1,7)=0;
 cur_trans(17,4)=0;cur_trans(18,4)=0;cur_trans(4,17)=0;cur_trans(4,18)=0;
 
-% 拓扑过滤
+% 拓扑过滤：移除洲际连接（S-C 模式）
 if year == 2050
     trans_connections(trans_connections==2)=0;
 else
@@ -209,8 +225,12 @@ save(outfile, 'opt_solar', 'opt_wind', 'opt_stoPow', 'opt_stoCap', 'opt_trans');
 fprintf('\n已保存 %s\n', outfile);
 
 %% 10. Pareto 前沿概览
-fprintf('\n=== Pareto 前沿（%d 个解） ===\n', n_solutions);
-fprintf('%5s %10s %10s %12s\n', '编号', '弃电率', '渗透率', '成本(十亿$)');
+fprintf('\n=== Pareto 前沿（%d 个解，基荷比例=%.1f%%） ===\n', n_solutions, base_load_ratio*100);
+fprintf('%5s %10s %12s %12s %12s %12s\n', '编号', '弃电率', '风光渗透率', '总覆盖率', '灵活电源', '成本(十亿$)');
 for i = 1:n_solutions
-    fprintf('%5d %10.4f %10.4f %12.1f\n', i, prs(i,1), 1-prs(i,2), prs(i,3));
+    flexible_ratio = prs(i, 2);
+    total_coverage_ratio = 1 - flexible_ratio;
+    solar_wind_penetration = 1 - base_load_ratio - flexible_ratio;
+    fprintf('%5d %10.4f %12.4f %12.4f %12.4f %12.1f\n', ...
+        i, prs(i,1), solar_wind_penetration, total_coverage_ratio, flexible_ratio, prs(i,3));
 end
