@@ -7,22 +7,32 @@
 %
 % 参数：
 %   year     - 优化年份（2050/2040/2030）
-%   sol_idx  - Pareto 解编号（0=自动选中间解）
+%   sol_idx  - Pareto 解编号（0=按照情景约束自动选择 preferred solution）
 %
 % 输出：Opt_*_Sel.mat（包含 opt_solar, opt_wind, opt_stoPow, opt_stoCap, opt_trans）
 
 if ~exist('year', 'var'), year = 2050; end
 if ~exist('sol_idx', 'var'), sol_idx = 0; end
 
+%% 加载共享 MATLAB 工具
+script_dir = fileparts(mfilename('fullpath'));
+addpath(fullfile(script_dir, '..', 'utils'));
+
 %% 加载当前 SSP 情景配置
 run('optimization_config.m');
 switch year
     case 2050
         base_load_ratio = BASE_LOAD_RATIO_2050;
+        min_vre_share = MIN_VRE_SHARE_2050;
+        max_vre_share = MAX_VRE_SHARE_2050;
     case 2040
         base_load_ratio = BASE_LOAD_RATIO_2040;
+        min_vre_share = MIN_VRE_SHARE_2040;
+        max_vre_share = MAX_VRE_SHARE_2040;
     case 2030
         base_load_ratio = BASE_LOAD_RATIO_2030;
+        min_vre_share = MIN_VRE_SHARE_2030;
+        max_vre_share = MAX_VRE_SHARE_2030;
     otherwise
         error('year 必须为 2030、2040 或 2050');
 end
@@ -51,17 +61,43 @@ n_solutions = size(res_scale, 1);
 nvars_total = size(res_scale, 2);
 fprintf('已加载 %d 个解（%d 个变量）\n', n_solutions, nvars_total);
 
-%% 3. 选择解（sol_idx=0 时自动选中间解）
+%% 3. 选择 preferred solution
 if sol_idx == 0
-    sol_idx = round(n_solutions / 2);
-    fprintf('自动选择第 %d 个解（共 %d 个的中间位置）\n', sol_idx, n_solutions);
+    selection = select_preferred_solution( ...
+        prs, ...
+        base_load_ratio, ...
+        min_vre_share, ...
+        max_vre_share, ...
+        MAX_CURTAILMENT, ...
+        SELECTION_MODE ...
+    );
+
+    sol_idx = selection.sol_idx;
+else
+    % 手动指定解时仍然计算并保存对应指标
+    flexible_ratio_manual = prs(sol_idx, 2);
+
+    selection = struct();
+    selection.status = 'manual';
+    selection.sol_idx = sol_idx;
+    selection.curtailment = prs(sol_idx, 1);
+    selection.flexible_ratio = flexible_ratio_manual;
+    selection.vre_share = 1 - base_load_ratio - flexible_ratio_manual;
+    selection.cost = prs(sol_idx, 3);
+    selection.min_vre_share = min_vre_share;
+    selection.max_vre_share = max_vre_share;
+    selection.max_curtailment = MAX_CURTAILMENT;
+    selection.selection_mode = SELECTION_MODE;
 end
 scale = res_scale(sol_idx, :);
-flexible_ratio = prs(sol_idx, 2);
-total_coverage_ratio = 1 - flexible_ratio;
-solar_wind_penetration = 1 - base_load_ratio - flexible_ratio;
-fprintf('解 %d：弃电率=%.4f, 风光渗透率=%.4f, 总覆盖率=%.4f, 灵活电源比例=%.4f, 成本=%.0f 十亿美元\n', ...
-    sol_idx, prs(sol_idx,1), solar_wind_penetration, total_coverage_ratio, flexible_ratio, prs(sol_idx,3));
+
+fprintf('解 %d：弃电率=%.4f, 风光渗透率=%.4f, 灵活电源比例=%.4f, 成本=%.1f 十亿美元\n', ...
+    selection.sol_idx, ...
+    selection.curtailment, ...
+    selection.vre_share, ...
+    selection.flexible_ratio, ...
+    selection.cost ...
+);
 
 %% 4. 重建候选格网索引
 
@@ -221,7 +257,38 @@ fprintf('opt_trans 非零数=%d\n', nnz(opt_trans));
 
 %% 9. 保存
 if ~exist('results', 'dir'), mkdir('results'); end; outfile = ['results/' selprefix '_Sel.mat'];
-save(outfile, 'opt_solar', 'opt_wind', 'opt_stoPow', 'opt_stoCap', 'opt_trans');
+preferred_sol_idx = selection.sol_idx;
+preferred_selection_status = selection.status;
+preferred_curtailment = selection.curtailment;
+preferred_vre_share = selection.vre_share;
+preferred_flexible_ratio = selection.flexible_ratio;
+preferred_cost = selection.cost;
+preferred_min_vre_share = selection.min_vre_share;
+preferred_max_vre_share = selection.max_vre_share;
+preferred_max_curtailment = selection.max_curtailment;
+preferred_selection_mode = selection.selection_mode;
+preferred_scenario_name = SCENARIO_NAME;
+preferred_base_load_ratio = base_load_ratio;
+
+save(outfile, ...
+    'opt_solar', ...
+    'opt_wind', ...
+    'opt_stoPow', ...
+    'opt_stoCap', ...
+    'opt_trans', ...
+    'preferred_sol_idx', ...
+    'preferred_selection_status', ...
+    'preferred_curtailment', ...
+    'preferred_vre_share', ...
+    'preferred_flexible_ratio', ...
+    'preferred_cost', ...
+    'preferred_min_vre_share', ...
+    'preferred_max_vre_share', ...
+    'preferred_max_curtailment', ...
+    'preferred_selection_mode', ...
+    'preferred_scenario_name', ...
+    'preferred_base_load_ratio' ...
+);
 fprintf('\n已保存 %s\n', outfile);
 
 %% 10. Pareto 前沿概览

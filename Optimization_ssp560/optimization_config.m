@@ -28,3 +28,21 @@ DEMAND_2030 = 40483;   % AR6 SSP5-6.0: 145.7 EJ/yr
 BASE_LOAD_RATIO_2050 = 0.642;  % 64.2%
 BASE_LOAD_RATIO_2040 = 0.747;  % 74.7%
 BASE_LOAD_RATIO_2030 = 0.788;  % 78.8%
+
+%% 4. Pareto preferred solution 筛选配置
+% 弃电率上限统一为 15%
+% SSP5-6.0：化石能源主导路径，不设置风光渗透率下界，使用五模型第二高值作为上界
+SCENARIO_NAME = 'SSP5-6.0';
+SELECTION_MODE = 'fossil_upper_bound';
+
+MAX_CURTAILMENT = 0.15;
+
+% SSP5-6.0 不设置风光渗透率下界
+MIN_VRE_SHARE_2030 = NaN;
+MIN_VRE_SHARE_2040 = NaN;
+MIN_VRE_SHARE_2050 = NaN;
+
+% 五模型中的第二高值
+MAX_VRE_SHARE_2030 = 0.0890;
+MAX_VRE_SHARE_2040 = 0.1173;
+MAX_VRE_SHARE_2050 = 0.1420;

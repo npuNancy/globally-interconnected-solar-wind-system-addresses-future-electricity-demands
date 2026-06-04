@@ -13,8 +13,12 @@
 
 set -e
 MATLAB=/data6/yanxiaokai/MATLAB/R2024b/bin/matlab
-LOGDIR=$(pwd)/logs
-mkdir -p $LOGDIR
+PYTHON=${PYTHON:-python}
+TIMESTAMP=$(date +%Y%m%d_%H%M)
+LOGDIR=$(pwd)/logs/logs_${TIMESTAMP}
+IMGDIR=$(pwd)/results/img
+mkdir -p "$LOGDIR"
+mkdir -p "$IMGDIR"
 
 run_matlab() {
     local script=$1
@@ -27,6 +31,30 @@ run_matlab() {
     fi
     echo "[$(date)] 完成：$script"
     return 0
+}
+
+plot_pareto() {
+    local scenario=$1
+    local year=$2
+    local h5file=$3
+    local selfile=$4
+    local outfile=$5
+
+    echo "[$(date)] 正在绘制 Pareto 前沿：$scenario $year"
+
+    $PYTHON ../plot_pareto_front.py \
+      --scenario "$scenario" \
+      --year "$year" \
+      --h5 "$h5file" \
+      --sel-mat "$selfile" \
+      --output "$outfile"
+
+    if [ $? -ne 0 ]; then
+        echo "[$(date)] Pareto 前沿绘图失败：$scenario $year"
+        return 1
+    fi
+
+    echo "[$(date)] Pareto 前沿已保存：$outfile"
 }
 
 echo "=========================================="
@@ -50,6 +78,11 @@ if ! run_matlab "year=2050; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2050.l
     exit 1
 fi
 
+# Pareto 前沿绘图：2050
+if ! plot_pareto "SSP5-6.0" 2050 "results/Optimization_SC_2050_Res.h5" "results/Opt_SC_2050_Sel.mat" "results/img/pareto_front_2050.png"; then
+    exit 1
+fi
+
 # 阶段2：2040年优化（大陆互联）
 echo ""
 echo "--- 阶段2：Optimization_SC_2040（2040年，大陆互联） ---"
@@ -66,6 +99,11 @@ if ! run_matlab "year=2040; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2040.l
     exit 1
 fi
 
+# Pareto 前沿绘图：2040
+if ! plot_pareto "SSP5-6.0" 2040 "results/Optimization_SC_2040_Res.h5" "results/Opt_SC_2040_Sel.mat" "results/img/pareto_front_2040.png"; then
+    exit 1
+fi
+
 # 阶段3：2030年优化（邻近互联）
 echo ""
 echo "--- 阶段3：Optimization_SA_2030（2030年，邻近互联） ---"
@@ -79,6 +117,11 @@ echo ""
 echo "--- 后处理：2030 -> Opt_SA_2030_Sel.mat ---"
 if ! run_matlab "year=2030; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2030.log"; then
     echo "流水线在2030后处理阶段停止"
+    exit 1
+fi
+
+# Pareto 前沿绘图：2030
+if ! plot_pareto "SSP5-6.0" 2030 "results/Optimization_SA_2030_Res.h5" "results/Opt_SA_2030_Sel.mat" "results/img/pareto_front_2030.png"; then
     exit 1
 fi
 
