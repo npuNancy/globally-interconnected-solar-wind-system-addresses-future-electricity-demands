@@ -3,7 +3,7 @@
 
 读取 H5 中的 Pareto 解，可选读取 Sel.mat 中的 preferred solution 元数据，
 绘制弃电率 vs 风光渗透率散点图。若提供 Sel.mat，则高亮 preferred solution 并标注约束边界；
-否则仅绘制散点图（无最优解标注、无约束边界）。
+否则从 CONFIG_LOOKUP 获取约束参数（仍绘制约束边界，但不标注最优解）。
 """
 from __future__ import annotations
 
@@ -15,6 +15,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.ticker import PercentFormatter
 from scipy.io import loadmat
+
+# 各情景/年份的约束参数（与 optimization_config.m 保持同步）
+# (scenario, year) -> (base_load_ratio, min_vre_share, max_vre_share, max_curtailment)
+CONFIG_LOOKUP: dict[tuple[str, int], tuple[float, float | None, float, float]] = {
+    ("SSP1-2.6", 2050): (0.239, 0.5544, 0.7111, 0.15),
+    ("SSP1-2.6", 2040): (0.375, 0.4308, 0.6823, 0.15),
+    ("SSP1-2.6", 2030): (0.558, 0.2635, 0.5789, 0.15),
+    ("SSP2-4.5", 2050): (0.518, 0.2871, 0.4646, 0.15),
+    ("SSP2-4.5", 2040): (0.639, 0.2091, 0.3572, 0.15),
+    ("SSP2-4.5", 2030): (0.717, 0.1417, 0.2579, 0.15),
+    ("SSP5-6.0", 2050): (0.642, None,   0.1420, 0.15),
+    ("SSP5-6.0", 2040): (0.747, None,   0.1173, 0.15),
+    ("SSP5-6.0", 2030): (0.788, None,   0.0890, 0.15),
+}
 
 
 def load_prs(h5_path: Path) -> np.ndarray:
@@ -69,17 +83,18 @@ def main() -> None:
         max_vre_share = scalar_from_mat(mat, "preferred_max_vre_share")
         max_curtailment = scalar_from_mat(mat, "preferred_max_curtailment")
     else:
+        key = (args.scenario, args.year)
+        if key not in CONFIG_LOOKUP:
+            raise ValueError(f"未知情景/年份组合：{key}，请提供 --sel-mat")
+
+        base_load_ratio, min_vre_share, max_vre_share, max_curtailment = CONFIG_LOOKUP[key]
         has_preferred = False
         sol_idx_python = -1
-        base_load_ratio = None
-        min_vre_share = None
-        max_vre_share = None
-        max_curtailment = None
 
     curtailment = prs[:, 0]
     flexible_ratio = prs[:, 1]
     cost = prs[:, 2]
-    vre_share = 1.0 - base_load_ratio - flexible_ratio if base_load_ratio is not None else 1.0 - flexible_ratio
+    vre_share = 1.0 - base_load_ratio - flexible_ratio
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
@@ -131,7 +146,7 @@ def main() -> None:
 
     title_suffix = "" if has_preferred else " (no qualified solution)"
     ax.set_title(f"{args.scenario} Pareto Front ({args.year}){title_suffix}")
-    ax.set_xlabel("Solar-wind penetration" if base_load_ratio is not None else "Total coverage (1 - flexible ratio)")
+    ax.set_xlabel("Solar-wind penetration")
     ax.set_ylabel("Curtailment rate")
     ax.xaxis.set_major_formatter(PercentFormatter(1.0))
     ax.yaxis.set_major_formatter(PercentFormatter(1.0))
