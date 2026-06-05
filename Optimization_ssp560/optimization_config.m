@@ -46,3 +46,13 @@ MIN_VRE_SHARE_2050 = NaN;
 MAX_VRE_SHARE_2030 = 0.0890;
 MAX_VRE_SHARE_2040 = 0.1173;
 MAX_VRE_SHARE_2050 = 0.1420;
+
+%% 5. 既有装机约束的允许违反区域数量（成本最小化模式）
+% 旧版 gamultiobj 通过 ConstraintTolerance 宽松容忍（2040=4, 2030=8），
+% 但增加 VRE 渗透率上下界后不能用宽松容差，否则 VRE 约束也会被错误容忍。
+% 改为 ConstraintTolerance=1e-6 + 显式写入约束：
+%   c_existing_wind = unmet_wind_region_count - ALLOWED_UNMET_WIND_REGIONS
+% 数据来源：与旧版 ConstraintTolerance 等价
+ALLOWED_UNMET_WIND_REGIONS_2050 = 0;   % 2050 完全不允许违反
+ALLOWED_UNMET_WIND_REGIONS_2040 = 4;   % 2040 允许 4 个风电区域不满足
+ALLOWED_UNMET_WIND_REGIONS_2030 = 8;   % 2030 允许 8 个风电区域不满足
