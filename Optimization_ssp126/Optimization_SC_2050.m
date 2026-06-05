@@ -191,7 +191,7 @@ persistent_data = struct( ...
 
 % 保存模型数据供 nonlcon2050.m 独立使用
 if ~exist('results', 'dir'), mkdir('results'); end
-save('results/model_data.mat', 'model_data', 'persistent_data');
+save('results/model_data_2050.mat', 'model_data', 'persistent_data');
 
 %% ======================== 9. 运行 GA 单目标优化 ========================
 T = datetime('now');

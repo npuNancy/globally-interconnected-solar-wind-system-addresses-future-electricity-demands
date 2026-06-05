@@ -12,7 +12,7 @@ function [c, ceq] = nonlcon2050(x, cost_cfg, scenario_cfg, model_data, persisten
 %                                           — 直接传参（用于测试）
 %
 % 注意：单参数模式需要先运行 Optimization_SC_2050.m 保存模型数据
-%       至 results/model_data.mat。
+%       至 results/model_data_2050.mat。
 
     if nargin == 1
         persistent p_cost_cfg p_scenario_cfg p_model_data p_persistent_data
@@ -29,7 +29,7 @@ function [c, ceq] = nonlcon2050(x, cost_cfg, scenario_cfg, model_data, persisten
                 'allowed_unmet_wind_regions', ALLOWED_UNMET_WIND_REGIONS_2050 ...
             );
 
-            data = load('results/model_data.mat', 'model_data', 'persistent_data');
+            data = load('results/model_data_2050.mat', 'model_data', 'persistent_data');
             p_model_data = data.model_data;
             p_persistent_data = data.persistent_data;
         end
