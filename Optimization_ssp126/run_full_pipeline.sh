@@ -42,12 +42,20 @@ plot_pareto() {
 
     echo "[$(date)] 正在绘制 Pareto 前沿：$scenario $year"
 
-    $PYTHON ../plot_pareto_front.py \
-      --scenario "$scenario" \
-      --year "$year" \
-      --h5 "$h5file" \
-      --sel-mat "$selfile" \
-      --output "$outfile"
+    if [ -n "$selfile" ] && [ -f "$selfile" ]; then
+        $PYTHON ../plot_pareto_front.py \
+          --scenario "$scenario" \
+          --year "$year" \
+          --h5 "$h5file" \
+          --sel-mat "$selfile" \
+          --output "$outfile"
+    else
+        $PYTHON ../plot_pareto_front.py \
+          --scenario "$scenario" \
+          --year "$year" \
+          --h5 "$h5file" \
+          --output "$outfile"
+    fi
 
     if [ $? -ne 0 ]; then
         echo "[$(date)] Pareto 前沿绘图失败：$scenario $year"
@@ -73,13 +81,16 @@ fi
 # 后处理 2050 -> 生成 Opt_SC_2050_Sel.mat
 echo ""
 echo "--- 后处理：2050 -> Opt_SC_2050_Sel.mat ---"
+convert_2050_ok=true
 if ! run_matlab "year=2050; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2050.log"; then
-    echo "流水线在2050后处理阶段停止"
-    exit 1
+    convert_2050_ok=false
 fi
 
-# Pareto 前沿绘图：2050
-if ! plot_pareto "SSP1-2.6" 2050 "results/Optimization_SC_2050_Res.h5" "results/Opt_SC_2050_Sel.mat" "results/img/pareto_front_2050.png"; then
+# Pareto 前沿绘图：2050（即使 convert 失败也尝试可视化）
+plot_pareto "SSP1-2.6" 2050 "results/Optimization_SC_2050_Res.h5" "results/Opt_SC_2050_Sel.mat" "results/img/pareto_front_2050.png" || true
+
+if [ "$convert_2050_ok" = false ]; then
+    echo "流水线在2050后处理阶段停止"
     exit 1
 fi
 
@@ -94,13 +105,16 @@ fi
 # 后处理 2040 -> 生成 Opt_SC_2040_Sel.mat
 echo ""
 echo "--- 后处理：2040 -> Opt_SC_2040_Sel.mat ---"
+convert_2040_ok=true
 if ! run_matlab "year=2040; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2040.log"; then
-    echo "流水线在2040后处理阶段停止"
-    exit 1
+    convert_2040_ok=false
 fi
 
-# Pareto 前沿绘图：2040
-if ! plot_pareto "SSP1-2.6" 2040 "results/Optimization_SC_2040_Res.h5" "results/Opt_SC_2040_Sel.mat" "results/img/pareto_front_2040.png"; then
+# Pareto 前沿绘图：2040（即使 convert 失败也尝试可视化）
+plot_pareto "SSP1-2.6" 2040 "results/Optimization_SC_2040_Res.h5" "results/Opt_SC_2040_Sel.mat" "results/img/pareto_front_2040.png" || true
+
+if [ "$convert_2040_ok" = false ]; then
+    echo "流水线在2040后处理阶段停止"
     exit 1
 fi
 
@@ -115,13 +129,16 @@ fi
 # 后处理 2030 -> 生成 Opt_SA_2030_Sel.mat
 echo ""
 echo "--- 后处理：2030 -> Opt_SA_2030_Sel.mat ---"
+convert_2030_ok=true
 if ! run_matlab "year=2030; sol_idx=0; convert_h5_to_sel" "$LOGDIR/convert2030.log"; then
-    echo "流水线在2030后处理阶段停止"
-    exit 1
+    convert_2030_ok=false
 fi
 
-# Pareto 前沿绘图：2030
-if ! plot_pareto "SSP1-2.6" 2030 "results/Optimization_SA_2030_Res.h5" "results/Opt_SA_2030_Sel.mat" "results/img/pareto_front_2030.png"; then
+# Pareto 前沿绘图：2030（即使 convert 失败也尝试可视化）
+plot_pareto "SSP1-2.6" 2030 "results/Optimization_SA_2030_Res.h5" "results/Opt_SA_2030_Sel.mat" "results/img/pareto_front_2030.png" || true
+
+if [ "$convert_2030_ok" = false ]; then
+    echo "流水线在2030后处理阶段停止"
     exit 1
 fi
 

@@ -61,7 +61,18 @@ n_solutions = size(res_scale, 1);
 nvars_total = size(res_scale, 2);
 fprintf('已加载 %d 个解（%d 个变量）\n', n_solutions, nvars_total);
 
-%% 3. 选择 preferred solution
+%% 3. Pareto 前沿概览（先打印所有解信息，再选择 preferred solution）
+fprintf('\n=== Pareto 前沿（%d 个解，基荷比例=%.1f%%） ===\n', n_solutions, base_load_ratio*100);
+fprintf('%5s %10s %12s %12s %12s %12s\n', '编号', '弃电率', '风光渗透率', '总覆盖率', '灵活电源', '成本(十亿$)');
+for i = 1:n_solutions
+    flexible_ratio = prs(i, 2);
+    total_coverage_ratio = 1 - flexible_ratio;
+    solar_wind_penetration = 1 - base_load_ratio - flexible_ratio;
+    fprintf('%5d %10.4f %12.4f %12.4f %12.4f %12.1f\n', ...
+        i, prs(i,1), solar_wind_penetration, total_coverage_ratio, flexible_ratio, prs(i,3));
+end
+
+%% 4. 选择 preferred solution
 if sol_idx == 0
     selection = select_preferred_solution( ...
         prs, ...
@@ -89,6 +100,13 @@ else
     selection.max_curtailment = MAX_CURTAILMENT;
     selection.selection_mode = SELECTION_MODE;
 end
+
+% 若无合格解，直接报错退出（不保存 Sel.mat）
+if strcmp(selection.status, 'no_qualified_solution')
+    fprintf('\n⚠ 警告：当前 Pareto 前沿不存在合格 preferred solution，不保存 Sel.mat\n');
+    error('当前 Pareto 前沿不存在合格 preferred solution，流水线停止');
+end
+
 scale = res_scale(sol_idx, :);
 
 fprintf('解 %d：弃电率=%.4f, 风光渗透率=%.4f, 灵活电源比例=%.4f, 成本=%.1f 十亿美元\n', ...
@@ -290,14 +308,3 @@ save(outfile, ...
     'preferred_base_load_ratio' ...
 );
 fprintf('\n已保存 %s\n', outfile);
-
-%% 10. Pareto 前沿概览
-fprintf('\n=== Pareto 前沿（%d 个解，基荷比例=%.1f%%） ===\n', n_solutions, base_load_ratio*100);
-fprintf('%5s %10s %12s %12s %12s %12s\n', '编号', '弃电率', '风光渗透率', '总覆盖率', '灵活电源', '成本(十亿$)');
-for i = 1:n_solutions
-    flexible_ratio = prs(i, 2);
-    total_coverage_ratio = 1 - flexible_ratio;
-    solar_wind_penetration = 1 - base_load_ratio - flexible_ratio;
-    fprintf('%5d %10.4f %12.4f %12.4f %12.4f %12.1f\n', ...
-        i, prs(i,1), solar_wind_penetration, total_coverage_ratio, flexible_ratio, prs(i,3));
-end

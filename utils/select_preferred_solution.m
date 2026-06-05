@@ -81,7 +81,12 @@ if isempty(qualified)
     fprintf('最低弃电率：%.4f\n', min(curtailment));
     fprintf('风光渗透率范围：[%.4f, %.4f]\n', min(vre_share), max(vre_share));
 
-    error('当前 Pareto 前沿不存在合格 preferred solution');
+    result.sol_idx = 0;
+    result.curtailment = NaN;
+    result.flexible_ratio = NaN;
+    result.vre_share = NaN;
+    result.cost = NaN;
+    return;
 end
 
 % 在合格解中选择成本最低方案
