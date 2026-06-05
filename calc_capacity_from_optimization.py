@@ -64,19 +64,41 @@ def _find_file(directory, patterns):
     return None
 
 
+def _compute_pv_density(rows, nrows=180):
+    """计算纬度依赖的光伏装机密度 (MW/km²)。
+
+    与 MATLAB compute_pv_density.m 保持一致：
+      density = 161.9 × Ω(lat) × FR
+    其中 Ω = GCR，FR = 0.15。
+    """
+    lat = 90.5 - rows
+    FR = 0.15
+    beta = 0.35396 * np.abs(lat) + 16.84775
+    alpha_min = np.maximum(90.0 - np.abs(lat) - 23.45, 0.1)
+    beta_rad = np.deg2rad(beta)
+    alpha_min_rad = np.deg2rad(alpha_min)
+    Omega = np.cos(beta_rad) / (np.cos(beta_rad) + np.sin(beta_rad) / np.tan(alpha_min_rad))
+    return 161.9 * Omega * FR
+
+
 def _build_capacity_grids(opt_dir):
     """构建 180×360 光伏/风电装机容量栅格（GW）。
 
     容量 = 安装密度(MW/km²) × 可用面积比例 × 格网面积(km²) / 1000
     """
+    nrows, ncols = 180, 360
+    all_rows = np.arange(1, nrows + 1)
+    colbroadcast = np.tile(all_rows.reshape(-1, 1), (1, ncols))
+    pv_density = _compute_pv_density(colbroadcast)
+
     solar_luccs = sio.loadmat(os.path.join(opt_dir, "Global_Solar_Net_Area_Add_Egrid.mat"))["data"] / 100.0
     solar_area = sio.loadmat(os.path.join(opt_dir, "Global_Solar_Fishnet_Area.mat"))["data"].astype(float)
-    solar_cap = 74 * solar_luccs * solar_area / 1000
+    solar_cap = pv_density * solar_luccs * solar_area / 1000
 
     wind_luccs = sio.loadmat(os.path.join(opt_dir, "Global_Wind_Net_Area_Add_Egrid.mat"))["data"] / 100.0
     wind_area = sio.loadmat(os.path.join(opt_dir, "Global_Wind_Fishnet_Area.mat"))["data"]
     landmask = sio.loadmat(os.path.join(opt_dir, "Global_LandMask.mat"))["data"]
-    density = np.where(landmask > 100, 4.6, 2.7)
+    density = np.where(landmask > 100, 6.07, 3.68)
     wind_cap = density * wind_luccs * wind_area / 1000
 
     return solar_cap, wind_cap
