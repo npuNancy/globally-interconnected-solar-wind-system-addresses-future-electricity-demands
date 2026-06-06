@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Pareto 前沿可视化脚本。
+"""单目标优化最优解指标可视化。
 
-读取 H5 中的 Pareto 解，可选读取 Sel.mat 中的 preferred solution 元数据，
-绘制弃电率 vs 风光渗透率散点图。若提供 Sel.mat，则高亮 preferred solution 并标注约束边界；
-否则从 CONFIG_LOOKUP 获取约束参数（仍绘制约束边界，但不标注最优解）。
+读取 H5 中的最优解指标（/metrics）和成本分解（/cost_breakdown），
+绘制关键指标摘要与年度成本分解条形图。
+
+用法:
+    python plot_pareto_front.py --scenario SSP2-4.5 --year 2050 \
+        --h5 Optimization_ssp245/results/Optimization_SC_2050_Res.h5 \
+        --output output/ssp245_2050_metrics.png
 """
 from __future__ import annotations
 
@@ -13,8 +17,6 @@ from pathlib import Path
 import h5py
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.ticker import PercentFormatter
-from scipy.io import loadmat
 
 # 各情景/年份的约束参数（与 optimization_config.m 保持同步）
 # (scenario, year) -> (base_load_ratio, min_vre_share, max_vre_share, max_curtailment)
@@ -30,131 +32,150 @@ CONFIG_LOOKUP: dict[tuple[str, int], tuple[float, float | None, float, float]] =
     ("SSP5-6.0", 2030): (0.788, None,   0.0890, 0.15),
 }
 
+# 年度成本分解项 (索引, 标签, 颜色)
+# 索引对应 Optimization_SC_2050.m 中 cost_bd_vec 的位置
+ANNUAL_ITEMS = [
+    (2,  "Annualized VRE CAPEX",             "#4C72B0"),
+    (5,  "Annualized Storage CAPEX",         "#55A868"),
+    (8,  "Annualized Transmission CAPEX",    "#C44E52"),
+    (9,  "VRE O&M",                          "#8172B2"),
+    (10, "Storage O&M",                      "#CCB974"),
+    (11, "Transmission O&M",                 "#64B5CD"),
+    (12, "Flexible Generation OPEX",         "#D65F5F"),
+]
 
-def load_prs(h5_path: Path) -> np.ndarray:
+
+def load_optimal_metrics(h5_path: Path) -> tuple[dict, np.ndarray | None]:
+    """从 H5 文件读取最优解指标和成本分解。"""
     with h5py.File(h5_path, "r") as f:
-        prs = np.asarray(f["prs"])
+        if "metrics" in f:
+            m = np.asarray(f["metrics"]).squeeze()
+            metrics = {
+                "curtailment_rate": float(m[0]),
+                "flexible_ratio": float(m[1]),
+                "vre_share": float(m[2]) if len(m) > 2 else None,
+                "total_annual_cost": float(m[3]) if len(m) > 3 else float(m[-1]),
+            }
+        elif "prs" in f:
+            prs = np.asarray(f["prs"]).squeeze()
+            metrics = {
+                "curtailment_rate": float(prs[0]),
+                "flexible_ratio": float(prs[1]),
+                "vre_share": None,
+                "total_annual_cost": float(prs[2]) if len(prs) > 2 else 0.0,
+            }
+        else:
+            raise ValueError(f"H5 文件缺少 /metrics 或 /prs: {h5_path}")
 
-    if prs.ndim != 2:
-        raise ValueError(f"/prs 必须是二维矩阵，实际 shape={prs.shape}")
+        cost_breakdown = None
+        if "cost_breakdown" in f:
+            cost_breakdown = np.asarray(f["cost_breakdown"]).squeeze()
 
-    if prs.shape[1] == 3:
-        return prs
-
-    if prs.shape[0] == 3:
-        return prs.T
-
-    raise ValueError(f"无法识别 /prs 的形状：{prs.shape}")
+    return metrics, cost_breakdown
 
 
-def scalar_from_mat(mat: dict, key: str) -> float:
-    if key not in mat:
-        raise KeyError(f"Sel.mat 缺少字段：{key}")
-    return float(np.asarray(mat[key]).squeeze())
-
-
-def optional_scalar_from_mat(mat: dict, key: str) -> float | None:
-    value = scalar_from_mat(mat, key)
-    if np.isnan(value):
-        return None
-    return value
+def _status(value: float | None, bound: float | None, cmp: str) -> str:
+    """约束满足状态标记。"""
+    if value is None or bound is None:
+        return ""
+    ok = (value >= bound) if cmp == ">=" else (value <= bound)
+    return "  OK" if ok else "  VIOLATED"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="单目标优化最优解指标可视化")
     parser.add_argument("--scenario", required=True)
     parser.add_argument("--year", type=int, required=True)
-    parser.add_argument("--h5", type=Path, required=True)
-    parser.add_argument("--sel-mat", type=Path, required=False)
+    parser.add_argument("--h5", type=Path, required=True, help="优化结果 H5 文件路径")
+    parser.add_argument("--sel-mat", type=Path, required=False, help="(保留兼容，未使用)")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
-    prs = load_prs(args.h5)
+    metrics, cost_breakdown = load_optimal_metrics(args.h5)
 
-    if args.sel_mat is not None:
-        mat = loadmat(args.sel_mat)
-
-        sol_idx_matlab = int(round(scalar_from_mat(mat, "preferred_sol_idx")))
-        has_preferred = sol_idx_matlab > 0
-        sol_idx_python = sol_idx_matlab - 1 if has_preferred else -1
-
-        base_load_ratio = scalar_from_mat(mat, "preferred_base_load_ratio")
-        min_vre_share = optional_scalar_from_mat(mat, "preferred_min_vre_share")
-        max_vre_share = scalar_from_mat(mat, "preferred_max_vre_share")
-        max_curtailment = scalar_from_mat(mat, "preferred_max_curtailment")
-    else:
-        key = (args.scenario, args.year)
-        if key not in CONFIG_LOOKUP:
-            raise ValueError(f"未知情景/年份组合：{key}，请提供 --sel-mat")
-
-        base_load_ratio, min_vre_share, max_vre_share, max_curtailment = CONFIG_LOOKUP[key]
-        has_preferred = False
-        sol_idx_python = -1
-
-    curtailment = prs[:, 0]
-    flexible_ratio = prs[:, 1]
-    cost = prs[:, 2]
-    vre_share = 1.0 - base_load_ratio - flexible_ratio
+    key = (args.scenario, args.year)
+    _, min_vre, max_vre, max_cur = CONFIG_LOOKUP.get(key, (None, None, None, None))
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    cr = metrics["curtailment_rate"]
+    fr = metrics["flexible_ratio"]
+    vs = metrics["vre_share"]
+    tc = metrics["total_annual_cost"]
 
-    scatter = ax.scatter(
-        vre_share,
-        curtailment,
-        c=cost,
-        s=28,
-        alpha=0.8,
+    has_breakdown = cost_breakdown is not None and len(cost_breakdown) >= 13
+
+    # ── 创建画布 ──
+    if has_breakdown:
+        fig, (ax_info, ax_bar) = plt.subplots(
+            1, 2, figsize=(15, 5), gridspec_kw={"width_ratios": [1, 1.6]}
+        )
+    else:
+        fig, ax_info = plt.subplots(1, 1, figsize=(8, 5))
+        ax_bar = None
+
+    # ── 左侧: 指标摘要 ──
+    ax_info.axis("off")
+
+    lines = [
+        f"Scenario: {args.scenario}    Year: {args.year}",
+        "",
+        f"  Curtailment Rate       {cr:>8.2%}{_status(cr, max_cur, '<=')}",
+        f"  Flexible Gen Ratio     {fr:>8.2%}",
+    ]
+    if vs is not None and vs > 0:
+        lines.append(f"  VRE Penetration        {vs:>8.2%}")
+        if min_vre is not None:
+            lines.append(
+                f"    Lower Bound          {min_vre:>8.2%}{_status(vs, min_vre, '>=')}"
+            )
+        if max_vre is not None:
+            lines.append(
+                f"    Upper Bound          {max_vre:>8.2%}{_status(vs, max_vre, '<=')}"
+            )
+    lines.append("")
+    lines.append(f"  Total Annual Cost  {tc:>10.1f} B USD/yr")
+
+    ax_info.text(
+        0.05, 0.95, "\n".join(lines),
+        transform=ax_info.transAxes, fontsize=11, fontfamily="monospace",
+        verticalalignment="top",
+        bbox=dict(boxstyle="round,pad=0.6", facecolor="#fffff0", edgecolor="#ccc", alpha=0.9),
+    )
+    ax_info.set_title(
+        f"Optimal Solution — {args.scenario} ({args.year})", fontsize=14, pad=12
     )
 
-    if has_preferred:
-        ax.scatter(
-            [vre_share[sol_idx_python]],
-            [curtailment[sol_idx_python]],
-            marker="*",
-            s=260,
-            edgecolors="black",
-            linewidths=1.2,
-            label=f"Preferred solution #{sol_idx_matlab}",
-            zorder=5,
-        )
+    # ── 右侧: 年度成本分解条形图 ──
+    if ax_bar is not None:
+        indices, labels, colors = zip(*ANNUAL_ITEMS)
+        values = np.array([cost_breakdown[i] for i in indices])
 
-    if min_vre_share is not None:
-        ax.axvline(
-            min_vre_share,
-            linestyle="--",
-            linewidth=1.2,
-            label=f"VRE lower bound: {min_vre_share:.1%}",
-        )
+        nonzero = values > 0
+        vals = values[nonzero]
+        labs = [l for l, n in zip(labels, nonzero) if n]
+        cols = [c for c, n in zip(colors, nonzero) if n]
 
-    if max_vre_share is not None:
-        ax.axvline(
-            max_vre_share,
-            linestyle="--",
-            linewidth=1.2,
-            label=f"VRE upper bound: {max_vre_share:.1%}",
-        )
+        if len(vals) == 0:
+            vals, labs, cols = values, list(labels), list(colors)
 
-    if max_curtailment is not None:
-        ax.axhline(
-            max_curtailment,
-            linestyle="--",
-            linewidth=1.2,
-            label=f"Curtailment upper bound: {max_curtailment:.1%}",
-        )
+        y_pos = np.arange(len(vals))
+        bars = ax_bar.barh(y_pos, vals, color=cols, edgecolor="white", height=0.55)
+        ax_bar.set_yticks(y_pos)
+        ax_bar.set_yticklabels(labs, fontsize=10)
+        ax_bar.set_xlabel("Billion USD / year", fontsize=11)
+        ax_bar.invert_yaxis()
+        ax_bar.grid(axis="x", alpha=0.25)
 
-    title_suffix = "" if has_preferred else " (no qualified solution)"
-    ax.set_title(f"{args.scenario} Pareto Front ({args.year}){title_suffix}")
-    ax.set_xlabel("Solar-wind penetration")
-    ax.set_ylabel("Curtailment rate")
-    ax.xaxis.set_major_formatter(PercentFormatter(1.0))
-    ax.yaxis.set_major_formatter(PercentFormatter(1.0))
-    ax.grid(True, alpha=0.25)
-    ax.legend(loc="best")
-
-    colorbar = fig.colorbar(scatter, ax=ax)
-    colorbar.set_label("System cost (billion USD)")
+        x_max = max(vals) if len(vals) > 0 else 1
+        for bar, val in zip(bars, vals):
+            ax_bar.text(
+                bar.get_width() + x_max * 0.02,
+                bar.get_y() + bar.get_height() / 2,
+                f"{val:.1f}",
+                va="center", fontsize=9,
+            )
+        ax_bar.set_title("Annual Cost Breakdown", fontsize=13, pad=10)
 
     fig.tight_layout()
     fig.savefig(args.output, dpi=220)
