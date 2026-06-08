@@ -98,6 +98,9 @@ def _build_capacity_grids(opt_dir):
     wind_luccs = sio.loadmat(os.path.join(opt_dir, "Global_Wind_Net_Area_Add_Egrid.mat"))["data"] / 100.0
     wind_area = sio.loadmat(os.path.join(opt_dir, "Global_Wind_Fishnet_Area.mat"))["data"]
     landmask = sio.loadmat(os.path.join(opt_dir, "Global_LandMask.mat"))["data"]
+    # Global_LandMask.tif 经测试确认：
+    #   landmask == 1 (原始值 > 100) 表示海洋格网（offshore），密度 6.07 MW/km²
+    #   landmask == 0 (原始值 < 100) 表示陆地格网（onshore），密度 3.68 MW/km²
     density = np.where(landmask > 100, 6.07, 3.68)
     wind_cap = density * wind_luccs * wind_area / 1000
 

@@ -10,6 +10,7 @@ function metrics = evaluate_dispatch_and_cost(ins_cap, gens, loads, CGrid_Index,
 %   gens                 - 候选格网发电时序矩阵（TWh, 8760h）
 %   loads                - 20区域负荷时序矩阵（TW, 8760h）
 %   CGrid_Index          - 候选格网区域索引矩阵 [区域编号, 选中状态, 陆海标记]
+%                        CGrid_Index(:,3): 0 = 陆上（onshore），1 = 海上（offshore）
 %   scale                - 决策向量
 %   base_load_ratio      - 基荷比例
 %   interconnection_mode - 'S-C'（大陆互联, maxNodes=3）或 'S-A'（邻近互联, maxNodes=2）
@@ -163,6 +164,36 @@ total_load_twh   = sum(loads(:));
 
 % 计算选中 VRE 总容量（TWp）
 total_vre_cap = sum(ins_cap(CGrid_Index(:,2) == 1));
+
+% ---- 容量诊断指标（GW） ----
+sel_mask = CGrid_Index(:,2) == 1;
+grid_idx = (1:length(CGrid_Index))';
+pv_sel   = sel_mask & (grid_idx <= nonlsol);
+wind_sel = sel_mask & (grid_idx > nonlsol);
+
+pv_capacity_gw   = sum(ins_cap(pv_sel)) * 1000;    % TWp → GWp
+wind_capacity_gw = sum(ins_cap(wind_sel)) * 1000;
+total_vre_capacity_gw = pv_capacity_gw + wind_capacity_gw;
+selected_pv_grid_count   = sum(pv_sel);
+selected_wind_grid_count = sum(wind_sel);
+
+% 陆上/海上风电拆分（CGrid_Index(:,3): 0=onshore, 1=offshore）
+onshore_wind_sel  = wind_sel & (CGrid_Index(:,3) == 0);
+offshore_wind_sel = wind_sel & (CGrid_Index(:,3) == 1);
+onshore_wind_capacity_gw  = sum(ins_cap(onshore_wind_sel)) * 1000;
+offshore_wind_capacity_gw = sum(ins_cap(offshore_wind_sel)) * 1000;
+
+% ---- 原始发电量指标（TWh） ----
+gross_pv_generation_twh   = sum(gens(pv_sel, :), 'all');
+gross_wind_generation_twh = sum(gens(wind_sel, :), 'all');
+gross_vre_generation_twh  = gross_pv_generation_twh + gross_wind_generation_twh;
+gross_vre_share = gross_vre_generation_twh / total_load_twh;
+
+% ---- 负荷服务与调度指标（TWh） ----
+base_load_twh              = base_load_ratio * total_load_twh;
+flexible_generation_twh    = sum(flexible_ele(:));
+residual_vre_service_twh   = vre_share * total_load_twh;
+curtailed_vre_twh          = sum(curtailed_ele(:));
 
 % 输电容量（TW）
 trans_power = zeros(20, 20);
@@ -350,6 +381,27 @@ metrics.transmission_capacity_TW = transmission_capacity_TW;
 metrics.grid_gens         = grid_gens;
 metrics.flexible_ele      = flexible_ele;
 metrics.curtailed_ele     = curtailed_ele;
+
+% 容量诊断
+metrics.pv_capacity_gw             = pv_capacity_gw;
+metrics.wind_capacity_gw           = wind_capacity_gw;
+metrics.onshore_wind_capacity_gw   = onshore_wind_capacity_gw;
+metrics.offshore_wind_capacity_gw  = offshore_wind_capacity_gw;
+metrics.total_vre_capacity_gw      = total_vre_capacity_gw;
+metrics.selected_pv_grid_count     = selected_pv_grid_count;
+metrics.selected_wind_grid_count   = selected_wind_grid_count;
+
+% 原始发电量诊断
+metrics.gross_pv_generation_twh    = gross_pv_generation_twh;
+metrics.gross_wind_generation_twh  = gross_wind_generation_twh;
+metrics.gross_vre_generation_twh   = gross_vre_generation_twh;
+metrics.gross_vre_share            = gross_vre_share;
+
+% 负荷服务与调度诊断
+metrics.base_load_twh              = base_load_twh;
+metrics.flexible_generation_twh    = flexible_generation_twh;
+metrics.residual_vre_service_twh   = residual_vre_service_twh;
+metrics.curtailed_vre_twh          = curtailed_vre_twh;
 
 end
 
