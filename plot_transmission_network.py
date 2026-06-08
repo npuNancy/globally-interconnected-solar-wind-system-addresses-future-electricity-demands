@@ -145,6 +145,15 @@ def main(dir_Optimization="Optimization_ssp126"):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     data_dir = os.path.join(base_dir, dir_Optimization)
     results_dir = os.path.join(data_dir, "results")
+    # 查找最新的 results_<timestamp> 子目录
+    if os.path.isdir(results_dir):
+        subdirs = sorted([
+            os.path.join(results_dir, d)
+            for d in os.listdir(results_dir)
+            if d.startswith("results_") and os.path.isdir(os.path.join(results_dir, d))
+        ])
+        if subdirs:
+            results_dir = subdirs[-1]
     tif_path = os.path.join(data_dir, "Global_Grid_Division.tif")
 
     # ── 读取区域地理数据 + 适宜网格掩码 ──

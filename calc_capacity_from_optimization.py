@@ -284,7 +284,10 @@ def main():
     if args.res_dir:
         res_dir = Path(args.res_dir)
     else:
-        res_dir = opt_dir / "results"
+        # 查找最新的 results_<timestamp> 子目录
+        results_root = opt_dir / "results"
+        subdirs = sorted(results_root.glob("results_*"))
+        res_dir = subdirs[-1] if subdirs else results_root
 
     print(f"优化目录：{opt_dir}")
     print(f"结果目录：{res_dir}")

@@ -251,6 +251,15 @@ def main():
             print(f"[skip] {data_dir}")
             continue
 
+        # 查找最新的 results_<timestamp> 子目录
+        subdirs = sorted([
+            os.path.join(data_dir, d)
+            for d in os.listdir(data_dir)
+            if d.startswith("results_") and os.path.isdir(os.path.join(data_dir, d))
+        ])
+        if subdirs:
+            data_dir = subdirs[-1]
+
         print(f"\n{'=' * 60}")
         print(f"  {scenario_name}  ({data_dir})")
         print(f"{'=' * 60}")
@@ -270,7 +279,10 @@ def main():
             plot_scenario(scenario_name, data_dir, results)
 
         # CSV 导出：含装机容量
+        # data_dir 可能是 results/ 或 results/results_<timestamp>/，opt_dir 是 SSP 目录
         opt_dir = os.path.dirname(data_dir)
+        if os.path.basename(opt_dir) == "results":
+            opt_dir = os.path.dirname(opt_dir)
         cap_files = ["Global_Solar_Net_Area_Add_Egrid.mat", "Global_LandMask.mat"]
         if all(os.path.exists(os.path.join(opt_dir, f)) for f in cap_files):
             solar_cap, wind_cap = _build_capacity_grids(opt_dir)

@@ -59,10 +59,26 @@ DIAG_LABELS = {
 }
 
 
+def find_latest_results_dir(ssp_dir):
+    """查找 SSP 目录下最新的 results_<timestamp> 子目录。
+
+    如果 results/ 下存在 results_* 子目录，返回按时间戳排序最新的一个。
+    否则返回 results/ 本身（向后兼容）。
+    """
+    results_root = ssp_dir / 'results'
+    if not results_root.exists():
+        return results_root
+    subdirs = sorted(results_root.glob('results_*'))
+    if subdirs:
+        return subdirs[-1]
+    return results_root
+
+
 def load_mat(ssp_dir, year):
     """加载 sidecar MAT 文件并提取诊断数据。"""
     info = YEARS[year]
-    mat_file = ssp_dir / 'results' / f'Optimization_{info["prefix"]}_{info["suffix"]}_metrics.mat'
+    results_dir = find_latest_results_dir(ssp_dir)
+    mat_file = results_dir / f'Optimization_{info["prefix"]}_{info["suffix"]}_metrics.mat'
     if not mat_file.exists():
         return None
 
