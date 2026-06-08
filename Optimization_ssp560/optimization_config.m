@@ -30,12 +30,12 @@ BASE_LOAD_RATIO_2040 = 0.747;  % 74.7%
 BASE_LOAD_RATIO_2030 = 0.788;  % 78.8%
 
 %% 4. Pareto preferred solution 筛选配置
-% 弃电率上限统一为 15%
+
 % SSP5-6.0：化石能源主导路径，不设置风光渗透率下界，使用五模型第二高值作为上界
 SCENARIO_NAME = 'SSP5-6.0';
 SELECTION_MODE = 'fossil_upper_bound';
 
-MAX_CURTAILMENT = 0.15;
+MAX_CURTAILMENT = 0.30;  % SSP5-6.0 弃电率上限放宽到 30%
 
 % SSP5-6.0 不设置风光渗透率下界
 MIN_VRE_SHARE_2030 = NaN;
