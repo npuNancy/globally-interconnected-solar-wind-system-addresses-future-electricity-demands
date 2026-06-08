@@ -57,3 +57,18 @@ ALLOWED_UNMET_WIND_REGIONS_2030 = 8;   % 2030 允许 8 个风电区域不满足
 
 %% 6. GA 收敛参数
 MAX_STALL_GENERATIONS = 25;  % 连续 N 代最优解无改善则提前终止
+
+%% 7. GA 随机种子
+% 默认固定为 42，便于复现实验。
+% 如需调整，只修改本文件中的 GA_SEED。
+GA_SEED = 42;
+
+%% 8. 并行池 worker 数量
+% GA 默认使用 64 个 worker，但高负载服务器可能无法启动。
+% 可通过环境变量覆盖：export PARPOOL_NUM_WORKERS=32
+env_parpool = getenv('PARPOOL_NUM_WORKERS');
+if ~isempty(env_parpool) && str2double(env_parpool) > 0
+    PARPOOL_NUM_WORKERS = str2double(env_parpool);
+else
+    PARPOOL_NUM_WORKERS = 64;
+end

@@ -34,15 +34,17 @@ addpath(script_dir);   % 确保 helper 函数（calculatePathCapacity 等）可�
 cost_cfg = cost_model_config();
 
 %% ======================== 1. 启动并行计算池 ========================
+% PARPOOL_NUM_WORKERS 在 optimization_config.m 中定义（默认 64，可通过环境变量覆盖）
+fprintf('请求并行池 worker 数: %d\n', PARPOOL_NUM_WORKERS);
 try
-    pool = parpool('local');
+    pool = parpool('local', PARPOOL_NUM_WORKERS);
     fprintf('并行池已启动：%d 个工作节点\n', pool.NumWorkers);
 catch ME
     if contains(ME.identifier, 'parallel:pool:alreadyopen')
         pool = gcp('nocreate');
         fprintf('并行池已在运行：%d 个工作节点\n', pool.NumWorkers);
     else
-        warning('并行池启动失败：%s', ME.message);
+        error('并行池启动失败，终止运行：%s', ME.message);
     end
 end
 
@@ -53,6 +55,9 @@ win_index = find(luccs > 0);
 fish_area = geotiffread('Global_Wind_Fishnet_Area.tif');
 fish_area = double(fish_area);
 areas = luccs(win_index) .* fish_area(win_index);
+% Global_LandMask.tif 经测试确认：
+%   landmask == 1 表示海洋格网（offshore）
+%   landmask == 0 表示陆地格网（onshore）
 landmask = readgeoraster('Global_LandMask.tif');
 landmask(landmask<100) = 0; landmask(landmask>100) = 1;
 landmask = landmask(win_index);
@@ -131,7 +136,8 @@ CGrid_Index(length(solar_index)+1 : length(solar_index)+length(win_index), 3) = 
 clear grid_ind R landmask
 
 %% ======================== 7. 设置优化变量与约束 ========================
-rng default
+rng(GA_SEED, 'twister');
+fprintf('GA 随机种子: %d\n', GA_SEED);
 nvars = length(CGrid_Index);
 load Global_Init_State.mat cur_storage cur_trans
 
@@ -193,6 +199,33 @@ persistent_data = struct( ...
 if ~exist('results', 'dir'), mkdir('results'); end
 save('results/model_data_2050.mat', 'model_data', 'persistent_data');
 
+%% ======================== 7.5 构造贪心初始解和初始种群 ========================
+fprintf('\n=== 构造贪心初始解 ===\n');
+[greedy_sol, greedy_metrics, greedy_status] = build_greedy_initial_solution(...
+    all_ins, all_gens, all_loads, CGrid_Index, lb, ub, ...
+    cost_cfg, scenario_cfg, nonlsol, nonlwin, persistent_data);
+fprintf('%s\n', greedy_status);
+
+if greedy_metrics.total_annual_cost > 0
+    fprintf('贪心初始解成本: %.2f billion USD/year\n', greedy_metrics.total_annual_cost);
+    fprintf('贪心初始解 VRE: %.4f\n', greedy_metrics.vre_share);
+end
+
+% 记录初始解统计
+initial_selected_pv = sum(greedy_sol(1:nonlsol));
+initial_selected_wind = sum(greedy_sol(nonlsol+1:nonlsol+nonlwin));
+initial_pv_ratio = initial_selected_pv / nonlsol;
+initial_wind_ratio = initial_selected_wind / nonlwin;
+initial_cost = greedy_metrics.total_annual_cost;
+
+[c_init, ceq_init] = nonlcon2050(greedy_sol, cost_cfg, scenario_cfg, model_data, persistent_data);
+init_feasibility = check_solution_feasibility(c_init, ceq_init, 1e-6);
+initial_max_violation = init_feasibility.max_constraint_violation;
+
+fprintf('\n=== 构造初始种群 ===\n');
+initial_population = build_initial_population(greedy_sol, lb, ub, ...
+    POPULATION_SIZE, scenario_cfg, nonlsol, nonlwin);
+
 %% ======================== 9. 运行 GA 单目标优化 ========================
 T = datetime('now');
 disp(T);
@@ -209,6 +242,7 @@ options = optimoptions('ga', ...
     'MaxGenerations',    MAX_GENERATIONS, ...
     'ConstraintTolerance', 1e-6, ...
     'MaxStallGenerations', MAX_STALL_GENERATIONS, ...
+    'InitialPopulationMatrix', initial_population, ...
     'Display',           'iter');
 
 fprintf('\n GA 迭代输出说明：Generation=代数 | Func-count=目标函数累计调用次数 | Best Penalty=当代最优惩罚值 | Mean Penalty=当代平均惩罚值 | Stall Generations=连续无改善代数\n\n');
@@ -228,38 +262,62 @@ T = datetime('now');
 disp(T);
 fprintf('优化完成，exitflag=%d，最优成本=%.2f\n', exitflag, best_cost);
 
+%% ======================== 9.2 初始-最终对比诊断 ========================
+final_selected_pv = sum(best_scale(1:nonlsol));
+final_selected_wind = sum(best_scale(nonlsol+1:nonlsol+nonlwin));
+final_pv_ratio = final_selected_pv / nonlsol;
+final_wind_ratio = final_selected_wind / nonlwin;
+
+% Hamming 距离
+hamming_dist = sum(greedy_sol(1:nonlsol+nonlwin) ~= best_scale(1:nonlsol+nonlwin));
+jaccard_sim = sum(greedy_sol(1:nonlsol+nonlwin) & best_scale(1:nonlsol+nonlwin)) / ...
+              sum(greedy_sol(1:nonlsol+nonlwin) | best_scale(1:nonlsol+nonlwin));
+
+fprintf('\n=== 初始-最终对比诊断 ===\n');
+fprintf('初始选中光伏比例: %.4f (%d/%d)\n', initial_pv_ratio, initial_selected_pv, nonlsol);
+fprintf('初始选中风电比例: %.4f (%d/%d)\n', initial_wind_ratio, initial_selected_wind, nonlwin);
+fprintf('最终选中光伏比例: %.4f (%d/%d)\n', final_pv_ratio, final_selected_pv, nonlsol);
+fprintf('最终选中风电比例: %.4f (%d/%d)\n', final_wind_ratio, final_selected_wind, nonlwin);
+fprintf('Hamming 距离: %d\n', hamming_dist);
+fprintf('Jaccard 相似度: %.4f\n', jaccard_sim);
+fprintf('初始成本: %.2f billion USD/year\n', initial_cost);
+fprintf('最终成本: %.2f billion USD/year\n', best_cost);
+fprintf('初始最大约束违反: %.2e\n', initial_max_violation);
+
+%% ======================== 9.5 最终解可行性检查 ========================
+[c_best, ceq_best] = nonlcon2050(best_scale, cost_cfg, scenario_cfg, model_data, persistent_data);
+feasibility = check_solution_feasibility(c_best, ceq_best, 1e-6);
+
+fprintf('\n=== 最终解可行性检查 ===\n');
+fprintf('最大约束违反量: %.2e\n', feasibility.max_constraint_violation);
+fprintf('是否可行: %s\n', mat2str(feasibility.is_feasible));
+
+if ~feasibility.is_feasible
+    fprintf('错误：最终解不满足约束，流水线终止。\n');
+    if ~exist('results', 'dir'), mkdir('results'); end
+    failed_dir = fullfile('results', 'failed');
+    if ~exist(failed_dir, 'dir'), mkdir(failed_dir); end
+    timestamp = datestr(now, 'yyyymmdd_HHMMSS');
+    fail_file = fullfile(failed_dir, sprintf('Optimization_SC_2050_failed_%s.mat', timestamp));
+    best_metrics = [];
+    save(fail_file, 'best_scale', 'best_cost', 'best_metrics', 'exitflag', ...
+        'scenario_cfg', 'feasibility');
+    error('Optimization:InfeasibleResult', ...
+        '最终解不可行 (max_violation=%.2e)，结果已保存至 %s', ...
+        feasibility.max_constraint_violation, fail_file);
+end
+
+if exitflag <= 0
+    fprintf('提示：当前解满足全部约束，但 GA 未完全收敛，exitflag=%d\n', exitflag);
+end
+
 %% ======================== 10. 评估最优解指标 ========================
 best_metrics = evaluate_dispatch_and_cost(all_ins, all_gens, all_loads, ...
     CGrid_Index, best_scale, scenario_cfg.base_load_ratio, ...
     scenario_cfg.interconnection_mode, cost_cfg, nonlsol);
 
-fprintf('\n=== 最优解指标 ===\n');
-fprintf('弃电率:        %.4f\n', best_metrics.curtailment_rate);
-fprintf('灵活电源比例:  %.4f\n', best_metrics.flexible_ratio);
-fprintf('风光渗透率:    %.4f\n', best_metrics.vre_share);
-fprintf('VRE 约束区间:  [%.4f, %.4f]\n', scenario_cfg.min_vre_share, scenario_cfg.max_vre_share);
-fprintf('年度总成本:    %.2f billion USD/year\n', best_metrics.total_annual_cost);
-fprintf('输电容量:      %.4f TW\n', best_metrics.transmission_capacity_TW);
-
+print_dispatch_diagnostics(best_metrics, scenario_cfg, cost_cfg);
 cb = best_metrics.cost_breakdown;
-fprintf('\n=== 成本分解 ===\n');
-if strcmp(cost_cfg.COST_MODE, 'annualized_incremental')
-    fprintf('VRE CAPEX (总):           %.2f billion USD\n', cb.vre_capex_billion);
-    fprintf('VRE CAPEX (增量):         %.2f billion USD\n', cb.incremental_vre_capex_billion);
-    fprintf('VRE CAPEX (年度化):       %.2f billion USD/year\n', cb.annualized_vre_capex_billion);
-    fprintf('储能 CAPEX (总):          %.2f billion USD\n', cb.storage_capex_billion);
-    fprintf('储能 CAPEX (增量):        %.2f billion USD\n', cb.incremental_storage_capex_billion);
-    fprintf('储能 CAPEX (年度化):      %.2f billion USD/year\n', cb.annualized_storage_capex_billion);
-    fprintf('输电 CAPEX (总):          %.2f billion USD\n', cb.tx_capex_billion);
-    fprintf('输电 CAPEX (增量):        %.2f billion USD\n', cb.incremental_tx_capex_billion);
-    fprintf('输电 CAPEX (年度化):      %.2f billion USD/year\n', cb.annualized_tx_capex_billion);
-    fprintf('VRE O&M:                  %.2f billion USD/year\n', cb.vre_om_billion);
-    fprintf('储能 O&M:                 %.2f billion USD/year\n', cb.storage_om_billion);
-    fprintf('输电 O&M:                 %.2f billion USD/year\n', cb.tx_om_billion);
-    fprintf('灵活电源 OPEX:            %.2f billion USD/year\n', cb.flexible_opex_billion);
-else
-    fprintf('VRE + 储能 + 输电总成本:  %.2f billion USD\n', best_metrics.total_annual_cost);
-end
 
 %% ======================== 11. 保存结果 ========================
 if ~exist('results', 'dir'), mkdir('results'); end
@@ -302,6 +360,23 @@ end
 h5create(h5file, '/cost_breakdown', size(cost_bd_vec));
 h5write(h5file, '/cost_breakdown', cost_bd_vec);
 
+% 诊断向量
+[diag_names, diag_values] = build_diagnostics_vector(best_metrics);
+h5create(h5file, '/diagnostics', size(diag_values));
+h5write(h5file, '/diagnostics', diag_values);
+
+% exitflag
+h5create(h5file, '/exitflag', [1, 1]);
+h5write(h5file, '/exitflag', double(exitflag));
+
+% 约束信息
+h5create(h5file, '/constraint_values', size(feasibility.constraint_values));
+h5write(h5file, '/constraint_values', feasibility.constraint_values);
+h5create(h5file, '/max_constraint_violation', [1, 1]);
+h5write(h5file, '/max_constraint_violation', feasibility.max_constraint_violation);
+h5create(h5file, '/is_feasible', [1, 1]);
+h5write(h5file, '/is_feasible', double(feasibility.is_feasible));
+
 fprintf('结果已保存至 %s\n', h5file);
 
 % Sidecar MAT 文件
@@ -317,7 +392,9 @@ save(matfile, ...
     'prs', ...
     'metrics_vec', ...
     'cost_bd_vec', ...
-    'cost_bd_names' ...
+    'cost_bd_names', ...
+    'diag_names', 'diag_values', ...
+    'feasibility' ...
 );
 fprintf('指标已保存至 %s\n', matfile);
 
