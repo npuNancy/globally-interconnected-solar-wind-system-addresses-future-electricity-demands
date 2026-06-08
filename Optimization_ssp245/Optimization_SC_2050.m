@@ -26,12 +26,12 @@
 
 clear, clc
 run('optimization_config.m');
-RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 
 % 加载共享工具和成本配置
 script_dir = fileparts(mfilename('fullpath'));
 addpath(fullfile(script_dir, '..', 'utils'));
 addpath(script_dir);   % 确保 helper 函数（calculatePathCapacity 等）可被 utils/ 调用
+RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 cost_cfg = cost_model_config();
 
 %% ======================== 1. 启动并行计算池 ========================
