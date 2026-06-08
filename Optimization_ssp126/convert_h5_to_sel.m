@@ -69,6 +69,21 @@ total_annual_cost = metrics_vec(4);
 % 读取成本分解
 cost_bd = h5read(h5file, '/cost_breakdown');
 
+% 检查可行性标记
+try
+    is_feasible = h5read(h5file, '/is_feasible');
+    if is_feasible ~= 1
+        error('Convert:SolutionInfeasible', ...
+            'HDF5 中 /is_feasible = %.0f，最终解不满足约束，终止后处理。', is_feasible);
+    end
+catch ME
+    if contains(ME.identifier, 'MATLAB:imagesci:h5read:datasetNotFound')
+        warning('Convert:NoFeasibilityField', 'HDF5 中未找到 /is_feasible，跳过该检查。');
+    else
+        rethrow(ME);
+    end
+end
+
 %% 3. 校验 VRE 约束
 fprintf('\n=== 最优解指标 ===\n');
 fprintf('弃电率:        %.4f\n', curtailment_rate);
@@ -77,11 +92,13 @@ fprintf('风光渗透率:    %.4f\n', vre_share);
 fprintf('VRE 约束区间:  [%.4f, %.4f]\n', min_vre_share, max_vre_share);
 fprintf('年度总成本:    %.2f billion USD/year\n', total_annual_cost);
 
-if vre_share < min_vre_share - 1e-6
-    fprintf('⚠ 警告：VRE 渗透率 %.4f 低于下界 %.4f\n', vre_share, min_vre_share);
+if ~isnan(min_vre_share) && vre_share < min_vre_share - 1e-6
+    error('Convert:VRELowerBoundViolation', ...
+        'VRE 渗透率 %.4f 低于下界 %.4f，终止后处理。', vre_share, min_vre_share);
 end
 if vre_share > max_vre_share + 1e-6
-    fprintf('⚠ 警告：VRE 渗透率 %.4f 高于上界 %.4f\n', vre_share, max_vre_share);
+    error('Convert:VREUpperBoundViolation', ...
+        'VRE 渗透率 %.4f 高于上界 %.4f，终止后处理。', vre_share, max_vre_share);
 end
 
 %% 4. 重建候选格网索引
@@ -133,6 +150,9 @@ win_index_all = find(luccs > 0);
 fish_area = geotiffread('Global_Wind_Fishnet_Area.tif');
 fish_area = double(fish_area);
 areas = luccs(win_index_all) .* fish_area(win_index_all);
+% Global_LandMask.tif 经测试确认：
+%   landmask == 1 表示海洋格网（offshore）
+%   landmask == 0 表示陆地格网（onshore）
 landmask = readgeoraster('Global_LandMask.tif');
 landmask(landmask < 100) = 0; landmask(landmask > 100) = 1;
 landmask = landmask(win_index_all);

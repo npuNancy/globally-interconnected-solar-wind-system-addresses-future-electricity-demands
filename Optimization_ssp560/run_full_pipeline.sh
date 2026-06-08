@@ -73,6 +73,10 @@ echo "=========================================="
 # 阶段1：2050年优化（大陆互联）
 echo ""
 echo "--- 阶段1：Optimization_SC_2050（2050年，大陆互联） ---"
+# 清理可能存在的旧结果，避免误用
+rm -f results/Optimization_SC_2050_Res.h5
+rm -f results/Optimization_SC_2050_metrics.mat
+rm -f results/Opt_SC_2050_Sel.mat
 if ! run_matlab "Optimization_SC_2050" "$LOGDIR/sc2050.log"; then
     echo "流水线在第1阶段停止"
     exit 1
@@ -97,6 +101,10 @@ fi
 # 阶段2：2040年优化（大陆互联）
 echo ""
 echo "--- 阶段2：Optimization_SC_2040（2040年，大陆互联） ---"
+# 清理可能存在的旧结果，避免误用
+rm -f results/Optimization_SC_2040_Res.h5
+rm -f results/Optimization_SC_2040_metrics.mat
+rm -f results/Opt_SC_2040_Sel.mat
 if ! run_matlab "Optimization_SC_2040" "$LOGDIR/sc2040.log"; then
     echo "流水线在第2阶段停止"
     exit 1
@@ -121,6 +129,10 @@ fi
 # 阶段3：2030年优化（邻近互联）
 echo ""
 echo "--- 阶段3：Optimization_SA_2030（2030年，邻近互联） ---"
+# 清理可能存在的旧结果，避免误用
+rm -f results/Optimization_SA_2030_Res.h5
+rm -f results/Optimization_SA_2030_metrics.mat
+rm -f results/Opt_SA_2030_Sel.mat
 if ! run_matlab "Optimization_SA_2030" "$LOGDIR/sa2030.log"; then
     echo "流水线在第3阶段停止"
     exit 1
