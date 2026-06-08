@@ -26,6 +26,7 @@
 
 clear, clc
 run('optimization_config.m');
+RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 
 % 加载共享工具和成本配置
 script_dir = fileparts(mfilename('fullpath'));
@@ -49,7 +50,7 @@ catch ME
 end
 
 %% ======================== 2. 加载2050年优化结果（约束候选格网） ========================
-load results/Opt_SC_2050_Sel opt_trans opt_stoCap opt_stoPow opt_wind opt_solar
+load(fullfile(RESULTS_DIR, 'Opt_SC_2050_Sel.mat'), 'opt_trans', 'opt_stoCap', 'opt_stoPow', 'opt_wind', 'opt_solar');
 
 %% ======================== 3. 构建风电候选格网（受2050约束） ========================
 luccs = geotiffread('Global_Wind_Net_Area_Add_Egrid.tif');
@@ -290,6 +291,14 @@ fprintf('初始成本: %.2f billion USD/year\n', initial_cost);
 fprintf('最终成本: %.2f billion USD/year\n', best_cost);
 fprintf('初始最大约束违反: %.2e\n', initial_max_violation);
 
+%% ======================== 10. 评估最优解指标（始终执行）========================
+best_metrics = evaluate_dispatch_and_cost(all_ins, all_gens, all_loads, ...
+    CGrid_Index, best_scale, scenario_cfg.base_load_ratio, ...
+    scenario_cfg.interconnection_mode, cost_cfg, nonlsol);
+
+print_dispatch_diagnostics(best_metrics, scenario_cfg, cost_cfg);
+cb = best_metrics.cost_breakdown;
+
 %% ======================== 9.5 最终解可行性检查 ========================
 [c_best, ceq_best] = nonlcon2040(best_scale, cost_cfg, scenario_cfg, model_data, persistent_data);
 feasibility = check_solution_feasibility(c_best, ceq_best, 1e-6);
@@ -300,12 +309,10 @@ fprintf('是否可行: %s\n', mat2str(feasibility.is_feasible));
 
 if ~feasibility.is_feasible
     fprintf('错误：最终解不满足约束，流水线终止。\n');
-    if ~exist('results', 'dir'), mkdir('results'); end
     failed_dir = fullfile('results', 'failed');
     if ~exist(failed_dir, 'dir'), mkdir(failed_dir); end
     timestamp = datestr(now, 'yyyymmdd_HHMMSS');
     fail_file = fullfile(failed_dir, sprintf('Optimization_SC_2040_failed_%s.mat', timestamp));
-    best_metrics = [];
     save(fail_file, 'best_scale', 'best_cost', 'best_metrics', 'exitflag', ...
         'scenario_cfg', 'feasibility');
     error('Optimization:InfeasibleResult', ...
@@ -317,21 +324,11 @@ if exitflag <= 0
     fprintf('提示：当前解满足全部约束，但 GA 未完全收敛，exitflag=%d\n', exitflag);
 end
 
-%% ======================== 11. 评估最优解指标 ========================
-best_metrics = evaluate_dispatch_and_cost(all_ins, all_gens, all_loads, ...
-    CGrid_Index, best_scale, scenario_cfg.base_load_ratio, ...
-    scenario_cfg.interconnection_mode, cost_cfg, nonlsol);
-
-print_dispatch_diagnostics(best_metrics, scenario_cfg, cost_cfg);
-cb = best_metrics.cost_breakdown;
-
-%% ======================== 12. 保存结果 ========================
-if ~exist('results', 'dir'), mkdir('results'); end
-
+%% ======================== 11. 保存结果 ========================
 res_scale = best_scale(:)';
 prs = [best_metrics.curtailment_rate, best_metrics.flexible_ratio, best_metrics.total_annual_cost];
 
-h5file = 'results/Optimization_SC_2040_Res.h5';
+h5file = fullfile(RESULTS_DIR, 'Optimization_SC_2040_Res.h5');
 if exist(h5file, 'file'), delete(h5file); end
 
 h5create(h5file, '/res_scale', size(res_scale));
@@ -384,7 +381,7 @@ h5write(h5file, '/metrics_schema_version', metrics_schema_version);
 
 fprintf('结果已保存至 %s\n', h5file);
 
-matfile = 'results/Optimization_SC_2040_metrics.mat';
+matfile = fullfile(RESULTS_DIR, 'Optimization_SC_2040_metrics.mat');
 save(matfile, ...
     'best_metrics', 'cost_cfg', 'scenario_cfg', ...
     'best_scale', 'best_cost', 'exitflag', ...

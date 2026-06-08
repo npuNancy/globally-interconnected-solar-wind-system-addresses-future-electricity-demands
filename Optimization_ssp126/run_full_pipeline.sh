@@ -15,6 +15,8 @@ set -e
 MATLAB=/data6/yanxiaokai/MATLAB/R2024b/bin/matlab
 PYTHON=${PYTHON:-python}
 TIMESTAMP=$(date +%Y%m%d_%H%M)
+RESULTS_SUBDIR=results_${TIMESTAMP}
+export RESULTS_SUBDIR
 LOGDIR=$(pwd)/logs/logs_${TIMESTAMP}
 IMGDIR=$(pwd)/results/img
 mkdir -p "$LOGDIR"
@@ -74,9 +76,9 @@ echo "=========================================="
 echo ""
 echo "--- 阶段1：Optimization_SC_2050（2050年，大陆互联） ---"
 # 清理可能存在的旧结果，避免误用
-rm -f results/Optimization_SC_2050_Res.h5
-rm -f results/Optimization_SC_2050_metrics.mat
-rm -f results/Opt_SC_2050_Sel.mat
+rm -f results/${RESULTS_SUBDIR}/Optimization_SC_2050_Res.h5
+rm -f results/${RESULTS_SUBDIR}/Optimization_SC_2050_metrics.mat
+rm -f results/${RESULTS_SUBDIR}/Opt_SC_2050_Sel.mat
 if ! run_matlab "Optimization_SC_2050" "$LOGDIR/sc2050.log"; then
     echo "流水线在第1阶段停止"
     exit 1
@@ -102,9 +104,9 @@ fi
 echo ""
 echo "--- 阶段2：Optimization_SC_2040（2040年，大陆互联） ---"
 # 清理可能存在的旧结果，避免误用
-rm -f results/Optimization_SC_2040_Res.h5
-rm -f results/Optimization_SC_2040_metrics.mat
-rm -f results/Opt_SC_2040_Sel.mat
+rm -f results/${RESULTS_SUBDIR}/Optimization_SC_2040_Res.h5
+rm -f results/${RESULTS_SUBDIR}/Optimization_SC_2040_metrics.mat
+rm -f results/${RESULTS_SUBDIR}/Opt_SC_2040_Sel.mat
 if ! run_matlab "Optimization_SC_2040" "$LOGDIR/sc2040.log"; then
     echo "流水线在第2阶段停止"
     exit 1
@@ -130,9 +132,9 @@ fi
 echo ""
 echo "--- 阶段3：Optimization_SA_2030（2030年，邻近互联） ---"
 # 清理可能存在的旧结果，避免误用
-rm -f results/Optimization_SA_2030_Res.h5
-rm -f results/Optimization_SA_2030_metrics.mat
-rm -f results/Opt_SA_2030_Sel.mat
+rm -f results/${RESULTS_SUBDIR}/Optimization_SA_2030_Res.h5
+rm -f results/${RESULTS_SUBDIR}/Optimization_SA_2030_metrics.mat
+rm -f results/${RESULTS_SUBDIR}/Opt_SA_2030_Sel.mat
 if ! run_matlab "Optimization_SA_2030" "$LOGDIR/sa2030.log"; then
     echo "流水线在第3阶段停止"
     exit 1
@@ -160,4 +162,4 @@ echo "  流水线完成：$(date)"
 echo "=========================================="
 echo ""
 echo "输出文件："
-ls -lh results/Optimization_*_Res.h5 results/Opt_*_Sel.mat 2>/dev/null
+ls -lh results/${RESULTS_SUBDIR}/Optimization_*_Res.h5 results/${RESULTS_SUBDIR}/Opt_*_Sel.mat 2>/dev/null

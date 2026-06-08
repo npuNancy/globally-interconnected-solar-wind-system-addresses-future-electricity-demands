@@ -18,6 +18,7 @@ addpath(fullfile(script_dir, '..', 'utils'));
 
 %% 加载当前 SSP 情景配置
 run('optimization_config.m');
+RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 cost_cfg = cost_model_config();
 
 switch year
@@ -42,13 +43,13 @@ fprintf('=== costmin h5 转 Sel：year=%d, base_load_ratio=%.3f ===\n', year, ba
 %% 1. 确定文件名和前缀
 switch year
     case 2050
-        h5file = 'results/Optimization_SC_2050_Res.h5';
+        h5file = fullfile(RESULTS_DIR, 'Optimization_SC_2050_Res.h5');
         selprefix = 'Opt_SC_2050';
     case 2040
-        h5file = 'results/Optimization_SC_2040_Res.h5';
+        h5file = fullfile(RESULTS_DIR, 'Optimization_SC_2040_Res.h5');
         selprefix = 'Opt_SC_2040';
     case 2030
-        h5file = 'results/Optimization_SA_2030_Res.h5';
+        h5file = fullfile(RESULTS_DIR, 'Optimization_SA_2030_Res.h5');
         selprefix = 'Opt_SA_2030';
     otherwise
         error('year 必须为 2030、2040 或 2050');
@@ -198,9 +199,9 @@ fprintf('风电候选格网：%d 个\n', length(win_index));
 %% 5. 对于 2040/2030，应用上一阶段 Sel 进行预筛选
 if year ~= 2050
     if year == 2040
-        load('results/Opt_SC_2050_Sel.mat', 'opt_wind', 'opt_solar');
+        load(fullfile(RESULTS_DIR, 'Opt_SC_2050_Sel.mat'), 'opt_wind', 'opt_solar');
     else
-        load('results/Opt_SC_2040_Sel.mat', 'opt_wind', 'opt_solar');
+        load(fullfile(RESULTS_DIR, 'Opt_SC_2040_Sel.mat'), 'opt_wind', 'opt_solar');
     end
 
     [~, pos_s] = ismember(find(opt_solar == 1), solar_index);
@@ -266,8 +267,7 @@ fprintf('opt_trans 非零数=%d\n', nnz(opt_trans));
 fprintf('输电总容量: %.4f TW\n', sum(opt_trans(:)) / 1000);
 
 %% 9. 保存
-if ~exist('results', 'dir'), mkdir('results'); end;
-outfile = ['results/' selprefix '_Sel.mat'];
+outfile = fullfile(RESULTS_DIR, [selprefix '_Sel.mat']);
 
 % costmin 专用元数据
 preferred_sol_idx = 1;

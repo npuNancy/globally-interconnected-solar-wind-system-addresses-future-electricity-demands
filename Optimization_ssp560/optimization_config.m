@@ -74,3 +74,13 @@ if ~isempty(env_parpool) && str2double(env_parpool) > 0
 else
     PARPOOL_NUM_WORKERS = 64;
 end
+
+%% 9. 结果保存子目录
+% 流水线脚本通过环境变量 RESULTS_SUBDIR 传入统一的时间戳子目录名。
+% 若未设置（如单独运行优化脚本），则自动生成。
+env_res = getenv('RESULTS_SUBDIR');
+if ~isempty(env_res)
+    RESULTS_SUBDIR = env_res;
+else
+    RESULTS_SUBDIR = ['results_' datestr(now, 'yyyymmdd_HHMM')];
+end
