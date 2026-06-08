@@ -199,6 +199,13 @@ persistent_data = struct( ...
 if ~exist('results', 'dir'), mkdir('results'); end
 save('results/model_data_2050.mat', 'model_data', 'persistent_data');
 
+% 清除旧指标缓存，避免复用旧定义产生的 metrics
+clear evaluate_dispatch_and_cost_cached;
+
+fprintf('VRE 渗透率定义: 实际风光发电量 / 总发电量\n');
+fprintf('弃电率约束: %s\n', mat2str(cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT));
+fprintf('弃电率上限: %.4f\n', cost_cfg.MAX_CURTAILMENT);
+
 %% ======================== 7.5 构造贪心初始解和初始种群 ========================
 fprintf('\n=== 构造贪心初始解 ===\n');
 [greedy_sol, greedy_metrics, greedy_status] = build_greedy_initial_solution(...
@@ -336,6 +343,7 @@ h5create(h5file, '/prs', size(prs));
 h5write(h5file, '/prs', prs);
 
 % 指标向量: [curtailment_rate, flexible_ratio, vre_share, total_annual_cost]
+% vre_share 严格定义：实际风光发电量 / 总发电量
 metrics_vec = [best_metrics.curtailment_rate, best_metrics.flexible_ratio, ...
                best_metrics.vre_share, best_metrics.total_annual_cost];
 h5create(h5file, '/metrics', size(metrics_vec));
@@ -377,6 +385,12 @@ h5write(h5file, '/max_constraint_violation', feasibility.max_constraint_violatio
 h5create(h5file, '/is_feasible', [1, 1]);
 h5write(h5file, '/is_feasible', double(feasibility.is_feasible));
 
+% 指标版本标记
+metrics_schema_version = 2;
+vre_share_definition = 'actual_vre_generation_twh / total_generation_twh';
+h5create(h5file, '/metrics_schema_version', [1, 1]);
+h5write(h5file, '/metrics_schema_version', metrics_schema_version);
+
 fprintf('结果已保存至 %s\n', h5file);
 
 % Sidecar MAT 文件
@@ -394,7 +408,8 @@ save(matfile, ...
     'cost_bd_vec', ...
     'cost_bd_names', ...
     'diag_names', 'diag_values', ...
-    'feasibility' ...
+    'feasibility', ...
+    'metrics_schema_version', 'vre_share_definition' ...
 );
 fprintf('指标已保存至 %s\n', matfile);
 

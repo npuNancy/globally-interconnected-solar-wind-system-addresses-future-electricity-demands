@@ -69,6 +69,18 @@ total_annual_cost = metrics_vec(4);
 % 读取成本分解
 cost_bd = h5read(h5file, '/cost_breakdown');
 
+% 检查指标版本
+try
+    metrics_schema_version = h5read(h5file, '/metrics_schema_version');
+catch ME
+    error('Convert:MissingMetricsSchemaVersion', ...
+        'HDF5 中缺少 /metrics_schema_version。请重新运行优化。');
+end
+if metrics_schema_version ~= 2
+    error('Convert:UnsupportedMetricsSchema', ...
+        '当前 HDF5 指标版本为 %.0f，要求版本为 2。请重新运行优化。', metrics_schema_version);
+end
+
 % 检查可行性标记
 try
     is_feasible = h5read(h5file, '/is_feasible');
@@ -88,7 +100,9 @@ end
 fprintf('\n=== 最优解指标 ===\n');
 fprintf('弃电率:        %.4f\n', curtailment_rate);
 fprintf('灵活电源比例:  %.4f\n', flexible_ratio);
-fprintf('风光渗透率:    %.4f\n', vre_share);
+fprintf('VRE 渗透率:    %.4f\n', vre_share);
+fprintf('VRE 定义:      实际风光发电量 / 总发电量\n');
+fprintf('弃电率上限:    %.4f\n', cost_cfg.MAX_CURTAILMENT);
 fprintf('VRE 约束区间:  [%.4f, %.4f]\n', min_vre_share, max_vre_share);
 fprintf('年度总成本:    %.2f billion USD/year\n', total_annual_cost);
 
@@ -99,6 +113,10 @@ end
 if vre_share > max_vre_share + 1e-6
     error('Convert:VREUpperBoundViolation', ...
         'VRE 渗透率 %.4f 高于上界 %.4f，终止后处理。', vre_share, max_vre_share);
+end
+if cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT && curtailment_rate > cost_cfg.MAX_CURTAILMENT + 1e-6
+    error('Convert:CurtailmentUpperBoundViolation', ...
+        '弃电率 %.4f 高于上限 %.4f，终止后处理。', curtailment_rate, cost_cfg.MAX_CURTAILMENT);
 end
 
 %% 4. 重建候选格网索引

@@ -18,9 +18,13 @@ function metrics = evaluate_dispatch_and_cost(ins_cap, gens, loads, CGrid_Index,
 %   nonlsol              - 光伏候选格网数量（用于区分光伏/风电）
 %
 % 输出：metrics 结构体
-%   .curtailment_rate      - 弃电率
-%   .flexible_ratio        - 灵活电源比例
-%   .vre_share             - 风光渗透率 = 1 - base_load_ratio - flexible_ratio
+%   .curtailment_rate      - 弃电率 = 弃电量 / 调度前原始风光发电量
+%   .flexible_ratio        - 灵活电源比例 = 灵活电源发电量 / 总负荷
+%   .vre_share             - VRE 渗透率 = 实际风光发电量 / 总发电量
+%   .actual_vre_generation_twh - 实际风光发电量 = 原始风光发电量 - 弃电量
+%   .total_generation_twh  - 总发电量 = 实际风光 + 基荷 + 灵活电源
+%   .gross_vre_generation_twh  - 调度前原始风光发电量
+%   .curtailed_vre_twh     - 弃电量
 %   .total_annual_cost     - 目标函数值（legacy 模式为一次性成本）
 %   .cost_breakdown        - 成本分解结构体
 %   .grid_gens             - 各区域发电时序 (20×8760)
@@ -157,10 +161,9 @@ for time_ind = 1:8760
 end
 
 %% ======================== 7. 计算诊断指标 ========================
-curtailment_rate = sum(curtailed_ele(:)) / sum(grid_gens(:));
-flexible_ratio   = sum(flexible_ele(:)) / sum(loads(:));
-vre_share        = 1 - base_load_ratio - flexible_ratio;
-total_load_twh   = sum(loads(:));
+
+% ---- 基础统计 ----
+total_load_twh = sum(loads(:));
 
 % 计算选中 VRE 总容量（TWp）
 total_vre_cap = sum(ins_cap(CGrid_Index(:,2) == 1));
@@ -183,17 +186,43 @@ offshore_wind_sel = wind_sel & (CGrid_Index(:,3) == 1);
 onshore_wind_capacity_gw  = sum(ins_cap(onshore_wind_sel)) * 1000;
 offshore_wind_capacity_gw = sum(ins_cap(offshore_wind_sel)) * 1000;
 
-% ---- 原始发电量指标（TWh） ----
+% ---- 调度前原始风光发电量 ----
 gross_pv_generation_twh   = sum(gens(pv_sel, :), 'all');
 gross_wind_generation_twh = sum(gens(wind_sel, :), 'all');
 gross_vre_generation_twh  = gross_pv_generation_twh + gross_wind_generation_twh;
-gross_vre_share = gross_vre_generation_twh / total_load_twh;
 
-% ---- 负荷服务与调度指标（TWh） ----
-base_load_twh              = base_load_ratio * total_load_twh;
-flexible_generation_twh    = sum(flexible_ele(:));
-residual_vre_service_twh   = vre_share * total_load_twh;
-curtailed_vre_twh          = sum(curtailed_ele(:));
+% 原始风光发电量 / 总负荷，仅用于诊断超配程度
+gross_vre_to_load_ratio = gross_vre_generation_twh / total_load_twh;
+
+% ---- 弃电量与弃电率 ----
+curtailed_vre_twh = sum(curtailed_ele(:));
+
+if gross_vre_generation_twh <= 0
+    curtailment_rate = 0;
+else
+    curtailment_rate = curtailed_vre_twh / gross_vre_generation_twh;
+end
+
+% ---- 实际风光发电量 ----
+actual_vre_generation_twh = max(gross_vre_generation_twh - curtailed_vre_twh, 0);
+
+% ---- 其他电源 ----
+base_generation_twh = base_load_ratio * total_load_twh;
+flexible_generation_twh = sum(flexible_ele(:));
+flexible_ratio = flexible_generation_twh / total_load_twh;
+
+% ---- 总发电量（储能放电不计入，避免重复计算） ----
+total_generation_twh = actual_vre_generation_twh ...
+    + base_generation_twh ...
+    + flexible_generation_twh;
+
+if total_generation_twh <= 0
+    error('Dispatch:InvalidTotalGeneration', ...
+        '总发电量必须大于 0，当前值为 %.6f TWh', total_generation_twh);
+end
+
+% ---- 严格定义的 VRE 渗透率 ----
+vre_share = actual_vre_generation_twh / total_generation_twh;
 
 % 输电容量（TW）
 trans_power = zeros(20, 20);
@@ -395,12 +424,13 @@ metrics.selected_wind_grid_count   = selected_wind_grid_count;
 metrics.gross_pv_generation_twh    = gross_pv_generation_twh;
 metrics.gross_wind_generation_twh  = gross_wind_generation_twh;
 metrics.gross_vre_generation_twh   = gross_vre_generation_twh;
-metrics.gross_vre_share            = gross_vre_share;
+metrics.gross_vre_to_load_ratio    = gross_vre_to_load_ratio;
 
-% 负荷服务与调度诊断
-metrics.base_load_twh              = base_load_twh;
+% 调度后发电量诊断
+metrics.actual_vre_generation_twh  = actual_vre_generation_twh;
+metrics.base_generation_twh        = base_generation_twh;
 metrics.flexible_generation_twh    = flexible_generation_twh;
-metrics.residual_vre_service_twh   = residual_vre_service_twh;
+metrics.total_generation_twh       = total_generation_twh;
 metrics.curtailed_vre_twh          = curtailed_vre_twh;
 
 end

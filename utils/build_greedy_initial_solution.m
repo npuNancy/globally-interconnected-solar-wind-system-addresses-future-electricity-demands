@@ -108,31 +108,32 @@ function [init_sol, init_metrics, status_msg] = build_greedy_initial_solution(..
     end
 
     %% ======== 3. 评估当前 VRE 渗透率（使用近似值，快速） ========
-    % 近似 VRE = 选中格网发电总量 / 总负荷（避免完整调度模拟）
+    % 仅用于快速估计场站超配程度。不属于严格定义的 VRE 渗透率。
+    % 不得直接用于判断最终 VRE 上下界。
     total_load = sum(loads(:));
     selected_grids = find(init_sol(1:nonlsol+nonlwin) == 1);
-    approx_vre = sum(gens(selected_grids, :), 'all') / total_load;
+    approx_gross_vre_to_load_ratio = sum(gens(selected_grids, :), 'all') / total_load;
 
     min_vre = scenario_cfg.min_vre_share;
     max_vre = scenario_cfg.max_vre_share;
 
-    fprintf('贪心初始解：满足装机约束后 近似 VRE = %.4f（已选中 %d 个场站）\n', ...
-        approx_vre, length(selected_grids));
+    fprintf('贪心初始解：满足装机约束后 近似 gross_vre/load = %.4f（已选中 %d 个场站）\n', ...
+        approx_gross_vre_to_load_ratio, length(selected_grids));
 
     %% ======== 4. 根据情景处理 VRE 约束 ========
     if isnan(min_vre)
         % SSP5-6.0：只有上界，检查是否已超过
-        if approx_vre > max_vre + 1e-6
-            status_msg = sprintf('警告：当前既有装机约束下最低 VRE ≈ %.4f，已超过 SSP5-6.0 上界 %.4f。继续运行 GA 没有意义，请检查约束可行性。', ...
-                approx_vre, max_vre);
+        if approx_gross_vre_to_load_ratio > max_vre + 1e-6
+            status_msg = sprintf('警告：当前既有装机约束下最低 gross_vre/load ≈ %.4f，已超过 SSP5-6.0 上界 %.4f。继续运行 GA 没有意义，请检查约束可行性。', ...
+                approx_gross_vre_to_load_ratio, max_vre);
             fprintf('%s\n', status_msg);
         else
-            fprintf('SSP5-6.0：最低 VRE ≈ %.4f 满足上界 %.4f，使用当前解。\n', ...
-                approx_vre, max_vre);
+            fprintf('SSP5-6.0：最低 gross_vre/load ≈ %.4f 满足上界 %.4f，使用当前解。\n', ...
+                approx_gross_vre_to_load_ratio, max_vre);
         end
     else
         % SSP1-2.6 或 SSP2-4.5：有下界，需要继续加入场站
-        if approx_vre < min_vre - 1e-6
+        if approx_gross_vre_to_load_ratio < min_vre - 1e-6
             fprintf('继续加入场站以达到 VRE 下界 %.4f ...\n', min_vre);
 
             % 收集所有未选中的场站
@@ -145,31 +146,31 @@ function [init_sol, init_metrics, status_msg] = build_greedy_initial_solution(..
 
             [~, sort_idx] = sort(efficiency_all, 'descend');
 
-            % 维护已选中格网的发电总量，用于快速更新近似 VRE
+            % 维护已选中格网的发电总量，用于快速更新近似比例
             running_gen = sum(gens(selected_grids, :), 'all');
 
-            % 逐步加入（使用近似 VRE，不做完整调度模拟）
+            % 逐步加入（使用近似比例，不做完整调度模拟）
             for i = 1:length(sort_idx)
-                if approx_vre >= min_vre - 1e-6
+                if approx_gross_vre_to_load_ratio >= min_vre - 1e-6
                     break;
                 end
 
                 grid_idx = all_grids(sort_idx(i));
                 init_sol(grid_idx) = 1;
                 running_gen = running_gen + sum(gens(grid_idx, :));
-                approx_vre = running_gen / total_load;
+                approx_gross_vre_to_load_ratio = running_gen / total_load;
 
                 if mod(i, 500) == 0
-                    fprintf('  已加入 %d 个场站，近似 VRE = %.4f\n', i, approx_vre);
+                    fprintf('  已加入 %d 个场站，近似 gross_vre/load = %.4f\n', i, approx_gross_vre_to_load_ratio);
                 end
             end
 
-            if approx_vre >= min_vre - 1e-6
-                fprintf('✓ 达到 VRE 下界 %.4f（近似 VRE = %.4f，共加入 %d 个额外场站）\n', ...
-                    min_vre, approx_vre, min(i, length(sort_idx)));
+            if approx_gross_vre_to_load_ratio >= min_vre - 1e-6
+                fprintf('✓ 达到 VRE 下界 %.4f（近似 gross_vre/load = %.4f，共加入 %d 个额外场站）\n', ...
+                    min_vre, approx_gross_vre_to_load_ratio, min(i, length(sort_idx)));
             else
-                status_msg = sprintf('警告：已加入所有可行场站，近似 VRE 仍为 %.4f，未达到下界 %.4f', ...
-                    approx_vre, min_vre);
+                status_msg = sprintf('警告：已加入所有可行场站，近似 gross_vre/load 仍为 %.4f，未达到下界 %.4f', ...
+                    approx_gross_vre_to_load_ratio, min_vre);
                 fprintf('%s\n', status_msg);
             end
 
@@ -180,10 +181,22 @@ function [init_sol, init_metrics, status_msg] = build_greedy_initial_solution(..
                 temp_metrics = evaluate_dispatch_and_cost(ins_cap, gens, loads, ...
                     CGrid_Index, init_sol, scenario_cfg.base_load_ratio, ...
                     scenario_cfg.interconnection_mode, cost_cfg, nonlsol);
-                actual_vre = temp_metrics.vre_share;
-                fprintf('  实际调度 VRE = %.4f\n', actual_vre);
+                actual_vre_share = temp_metrics.vre_share;
+                actual_curtailment_rate = temp_metrics.curtailment_rate;
+                fprintf('  实际 VRE 渗透率 = %.4f\n', actual_vre_share);
+                fprintf('  实际弃电率 = %.4f\n', actual_curtailment_rate);
 
-                if actual_vre >= min_vre - 1e-6
+                vre_ok = (isnan(min_vre) || actual_vre_share >= min_vre - 1e-6) ...
+                    && actual_vre_share <= max_vre + 1e-6;
+                curtailment_ok = ~cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT ...
+                    || actual_curtailment_rate <= cost_cfg.MAX_CURTAILMENT + 1e-6;
+
+                if vre_ok && curtailment_ok
+                    fprintf('  ✓ 当前贪心解满足 VRE 与弃电率约束\n');
+                    break;
+                end
+
+                if actual_vre_share >= min_vre - 1e-6
                     fprintf('  ✓ 实际 VRE 已满足下界 %.4f\n', min_vre);
                     break;
                 end
@@ -210,7 +223,7 @@ function [init_sol, init_metrics, status_msg] = build_greedy_initial_solution(..
                 fprintf('  继续添加 %d 个场站\n', batch_size);
             end
         else
-            fprintf('✓ 当前近似 VRE %.4f 已满足下界 %.4f\n', approx_vre, min_vre);
+            fprintf('✓ 当前近似 gross_vre/load %.4f 已满足下界 %.4f\n', approx_gross_vre_to_load_ratio, min_vre);
         end
     end
 
@@ -219,6 +232,6 @@ function [init_sol, init_metrics, status_msg] = build_greedy_initial_solution(..
     init_metrics = evaluate_dispatch_and_cost(ins_cap, gens, loads, ...
         CGrid_Index, init_sol, scenario_cfg.base_load_ratio, ...
         scenario_cfg.interconnection_mode, cost_cfg, nonlsol);
-    fprintf('最终调度 VRE = %.4f，成本 = %.2f billion USD/year\n', ...
-        init_metrics.vre_share, init_metrics.total_annual_cost);
+    fprintf('最终调度 VRE = %.4f，弃电率 = %.4f，成本 = %.2f billion USD/year\n', ...
+        init_metrics.vre_share, init_metrics.curtailment_rate, init_metrics.total_annual_cost);
 end

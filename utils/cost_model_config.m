@@ -78,10 +78,26 @@ cost_cfg.TX_OM_RATIO  = 0.0;        % 占输电 CAPEX 比例
 cost_cfg.ENABLE_FLEXIBLE_OPEX = false;
 cost_cfg.FLEXIBLE_MC_USD_PER_MWH = zeros(20, 1);  % 各区域边际成本 USD/MWh
 
-%% 8. 弃电约束与弃电成本（默认关闭）
-cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT = false;
+%% 8. 弃电率约束与弃电成本
+
+% 弃电率定义：
+%   curtailment_rate = 弃电量 / 调度前原始风光发电量
+%
+% 弃电率约束：
+%   curtailment_rate <= MAX_CURTAILMENT
+%
+% 该约束与 VRE 渗透率约束相互独立。
+%
+% VRE 渗透率定义：
+%   vre_share = 实际风光发电量 / 总发电量
+%
+% 实际风光发电量：
+%   actual_vre_generation_twh = gross_vre_generation_twh - curtailed_vre_twh
+
+cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT = true;
 cost_cfg.MAX_CURTAILMENT = 0.15;
 
+% 暂不启用弃电成本
 cost_cfg.ENABLE_CURTAILMENT_COST = false;
 cost_cfg.CURTAILMENT_COST_USD_PER_MWH = 0;
 

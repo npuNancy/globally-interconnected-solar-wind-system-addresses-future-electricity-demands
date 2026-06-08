@@ -16,24 +16,26 @@ function print_dispatch_diagnostics(metrics, scenario_cfg, cost_cfg)
     fprintf('选中风电格网数:        %d\n',     metrics.selected_wind_grid_count);
 
     fprintf('\n=== 原始发电量诊断 ===\n');
-    fprintf('光伏原始发电量:        %.4f TWh\n', metrics.gross_pv_generation_twh);
-    fprintf('风电原始发电量:        %.4f TWh\n', metrics.gross_wind_generation_twh);
-    fprintf('原始风光发电量:        %.4f TWh\n', metrics.gross_vre_generation_twh);
-    fprintf('原始风光发电占比:      %.4f\n',     metrics.gross_vre_share);
+    fprintf('光伏原始发电量:          %.4f TWh\n', metrics.gross_pv_generation_twh);
+    fprintf('风电原始发电量:          %.4f TWh\n', metrics.gross_wind_generation_twh);
+    fprintf('原始风光发电量:          %.4f TWh\n', metrics.gross_vre_generation_twh);
+    fprintf('原始风光发电量 / 总负荷: %.4f\n',     metrics.gross_vre_to_load_ratio);
 
-    fprintf('\n=== 负荷服务与调度诊断 ===\n');
-    fprintf('总负荷:                %.4f TWh\n', metrics.total_load_twh);
-    fprintf('基荷发电量:            %.4f TWh\n', metrics.base_load_twh);
-    fprintf('灵活电源发电量:        %.4f TWh\n', metrics.flexible_generation_twh);
-    fprintf('VRE 剩余负荷服务等价值:%.4f TWh\n', metrics.residual_vre_service_twh);
-    fprintf('弃电量:                %.4f TWh\n', metrics.curtailed_vre_twh);
-    fprintf('弃电率:                %.4f\n',     metrics.curtailment_rate);
-    fprintf('输电容量:              %.4f TW\n',  metrics.transmission_capacity_TW);
+    fprintf('\n=== 调度后实际发电量 ===\n');
+    fprintf('弃电量:                  %.4f TWh\n', metrics.curtailed_vre_twh);
+    fprintf('弃电率:                  %.4f\n',     metrics.curtailment_rate);
+    fprintf('实际风光发电量:          %.4f TWh\n', metrics.actual_vre_generation_twh);
+    fprintf('基荷发电量:              %.4f TWh\n', metrics.base_generation_twh);
+    fprintf('灵活电源发电量:          %.4f TWh\n', metrics.flexible_generation_twh);
+    fprintf('总发电量:                %.4f TWh\n', metrics.total_generation_twh);
 
     fprintf('\n=== 渗透率与约束 ===\n');
-    fprintf('vre_share (残差定义):  %.4f\n', metrics.vre_share);
-    fprintf('VRE 约束区间:          [%.4f, %.4f]\n', ...
+    fprintf('VRE 渗透率:              %.4f\n', metrics.vre_share);
+    fprintf('VRE 定义:                实际风光发电量 / 总发电量\n');
+    fprintf('VRE 约束区间:            [%.4f, %.4f]\n', ...
         scenario_cfg.min_vre_share, scenario_cfg.max_vre_share);
+    fprintf('弃电率上限:              %.4f\n', cost_cfg.MAX_CURTAILMENT);
+    fprintf('弃电率约束是否启用:      %s\n', mat2str(cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT));
 
     fprintf('\n=== 成本 ===\n');
     fprintf('年度总成本:            %.2f billion USD/year\n', metrics.total_annual_cost);

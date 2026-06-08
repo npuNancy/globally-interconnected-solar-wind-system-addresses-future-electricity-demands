@@ -44,16 +44,17 @@ DIAG_LABELS = {
     'gross_pv_generation_twh': '光伏原始发电量 (TWh)',
     'gross_wind_generation_twh': '风电原始发电量 (TWh)',
     'gross_vre_generation_twh': '原始风光发电量 (TWh)',
-    'gross_vre_share': '原始风光发电占比',
-    'base_load_twh': '基荷发电量 (TWh)',
-    'flexible_generation_twh': '灵活电源发电量 (TWh)',
-    'residual_vre_service_twh': 'VRE 剩余负荷服务等价值 (TWh)',
+    'gross_vre_to_load_ratio': '原始风光发电量 / 总负荷',
     'curtailed_vre_twh': '弃电量 (TWh)',
     'curtailment_rate': '弃电率',
+    'actual_vre_generation_twh': '实际风光发电量 (TWh)',
+    'base_generation_twh': '基荷发电量 (TWh)',
+    'flexible_generation_twh': '灵活电源发电量 (TWh)',
+    'total_generation_twh': '总发电量 (TWh)',
+    'vre_share': 'VRE 渗透率：实际风光发电量 / 总发电量',
+    'flexible_ratio': '灵活电源比例',
     'total_load_twh': '总负荷 (TWh)',
     'transmission_capacity_tw': '输电容量 (TW)',
-    'vre_share': 'VRE 渗透率 (残差定义)',
-    'flexible_ratio': '灵活电源比例',
     'total_annual_cost': '年度总成本 (billion USD/year)',
 }
 
@@ -169,15 +170,19 @@ def write_markdown(rows_2050, rows_all, output_path):
     # ---- 全年度汇总 ----
     lines.append('## 全年度汇总\n')
     if rows_all:
-        lines.append('| SSP | 年份 | 光伏装机 (GW) | 风电装机 (GW) | 原始风光发电占比 | 弃电率 | VRE 渗透率 | 年度成本 (B$/yr) | exitflag |')
-        lines.append('|---|---:|---:|---:|---:|---:|---:|---:|---:|')
+        lines.append('| SSP | 年份 | 光伏装机 (GW) | 风电装机 (GW) | 原始风光发电量 (TWh) | 原始风光/总负荷 | 弃电量 (TWh) | 弃电率 | 实际风光发电量 (TWh) | 总发电量 (TWh) | VRE 渗透率 | 年度成本 (B$/yr) | exitflag |')
+        lines.append('|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|')
         for r in rows_all:
             lines.append(
                 f'| {r["ssp"]} | {r["year"]} '
                 f'| {r.get("pv_capacity_gw", np.nan):,.2f} '
                 f'| {r.get("wind_capacity_gw", np.nan):,.2f} '
-                f'| {r.get("gross_vre_share", np.nan):.4f} '
+                f'| {r.get("gross_vre_generation_twh", np.nan):,.2f} '
+                f'| {r.get("gross_vre_to_load_ratio", np.nan):.4f} '
+                f'| {r.get("curtailed_vre_twh", np.nan):,.2f} '
                 f'| {r.get("curtailment_rate", np.nan):.4f} '
+                f'| {r.get("actual_vre_generation_twh", np.nan):,.2f} '
+                f'| {r.get("total_generation_twh", np.nan):,.2f} '
                 f'| {r.get("vre_share", np.nan):.4f} '
                 f'| {r.get("total_annual_cost", np.nan):,.2f} '
                 f'| {r.get("exitflag", "N/A")} |'

@@ -79,7 +79,11 @@ function population = build_initial_population(greedy_sol, lb, ub, pop_size, ...
     end
 
     %% 3. 定向增删解（30%）
-    % 根据 VRE 上下界定向调整场站数量
+    % 定向增删场站仅用于构造候选初始个体。
+    %
+    % 最终是否满足约束，由 nonlcon*.m 调用完整调度判断：
+    %   VRE 渗透率 = 实际风光发电量 / 总发电量
+    %   弃电率 = 弃电量 / 调度前原始风光发电量
     min_vre = scenario_cfg.min_vre_share;
     max_vre = scenario_cfg.max_vre_share;
 

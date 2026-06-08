@@ -94,6 +94,12 @@ function [c, ceq] = nonlcon2050(x, cost_cfg, scenario_cfg, model_data, persisten
     c(end+1) = unmet_wind_count - allowed_unmet_wind;
 
     %% ======== 2. VRE 渗透率约束 ========
+    % VRE 渗透率严格定义：
+    %   vre_share = actual_vre_generation_twh / total_generation_twh
+    % 其中：
+    %   actual_vre_generation_twh = gross_vre_generation_twh - curtailed_vre_twh
+    %   total_generation_twh = actual_vre + base_generation + flexible_generation
+
     metrics = evaluate_dispatch_and_cost_cached(x, ins_cap, gens, loads, ...
         CGrid_Index, scenario_cfg.base_load_ratio, scenario_cfg.interconnection_mode, ...
         cost_cfg, nonlsol);
@@ -102,7 +108,7 @@ function [c, ceq] = nonlcon2050(x, cost_cfg, scenario_cfg, model_data, persisten
     c(end+1) = min_vre - vre_share;
     c(end+1) = vre_share - max_vre;
 
-    %% ======== 3. 可选弃电率约束 ========
+    %% ======== 3. 弃电率上限约束 ========
     if cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT
         c(end+1) = metrics.curtailment_rate - cost_cfg.MAX_CURTAILMENT;
     end
