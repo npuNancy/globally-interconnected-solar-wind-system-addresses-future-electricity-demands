@@ -1,4 +1,4 @@
-function metrics = evaluate_dispatch_and_cost(ins_cap, gens, loads, CGrid_Index, scale, ...
+function [metrics, detail] = evaluate_dispatch_and_cost(ins_cap, gens, loads, CGrid_Index, scale, ...
     base_load_ratio, interconnection_mode, cost_cfg, nonlsol)
 % EVALUATE_DISPATCH_AND_COST — 8760小时逐时调度模拟与成本核算
 %
@@ -17,20 +17,20 @@ function metrics = evaluate_dispatch_and_cost(ins_cap, gens, loads, CGrid_Index,
 %   cost_cfg             - 成本模型配置（来自 cost_model_config()）
 %   nonlsol              - 光伏候选格网数量（用于区分光伏/风电）
 %
-% 输出：metrics 结构体
-%   .curtailment_rate      - 弃电率 = 弃电量 / 调度前原始风光发电量
-%   .flexible_ratio        - 灵活电源比例 = 灵活电源发电量 / 总负荷
-%   .vre_share             - VRE 渗透率 = 实际风光发电量 / 总发电量
-%   .actual_vre_generation_twh - 实际风光发电量 = 原始风光发电量 - 弃电量
-%   .total_generation_twh  - 总发电量 = 实际风光 + 基荷 + 灵活电源
-%   .gross_vre_generation_twh  - 调度前原始风光发电量
-%   .curtailed_vre_twh     - 弃电量
-%   .total_annual_cost     - 目标函数值（legacy 模式为一次性成本）
-%   .cost_breakdown        - 成本分解结构体
-%   .grid_gens             - 各区域发电时序 (20×8760)
-%   .flexible_ele          - 灵活电源需求 (8760×20)
-%   .curtailed_ele         - 弃电量 (8760×20)
-%   .total_load            - 总负荷 (TWh)
+% 输出：
+%   metrics - 结构体（同前）
+%   detail  - 可选第二输出，包含逐小时能源流数据（仅当 nargout >= 2 时计算）
+%       .raw_vre_generation_twh_hourly  - 原始风光发电量 (1×8760)
+%       .load_twh_hourly                - 原始总负荷 (1×8760)
+%       .actual_vre_generation_twh_hourly - 负荷侧实际风光供电量 (1×8760)
+%       .storage_discharge_twh_hourly   - 储能放电 (1×8760)
+%       .storage_charge_twh_hourly      - 储能充电 (1×8760)
+%       .base_generation_twh_hourly     - 基荷 (1×8760)
+%       .flexible_generation_twh_hourly - 灵活电源 (1×8760)
+%       .curtailment_twh_hourly         - 弃电 (1×8760)
+%       .stored_energy_twh_hourly       - 储能电量 (1×8761)
+
+    want_detail = nargout >= 2;
 
 %% ======================== 1. 计算各区域发电曲线 ========================
 CGrid_Index(:,2) = round(scale(1:length(CGrid_Index)));
@@ -41,7 +41,8 @@ for gg_ind = 1:20
     grid_gens(gg_ind, :) = sum(selgens, 1, 'omitnan');
 end
 
-%% ======================== 2. 扣除基荷发电（非可再生调度电源） ========================
+%% ======================== 2. 保存原始负荷并扣除基荷发电（非可再生调度电源） ========================
+loads_original = loads;
 grid_load = loads;
 for gg_ind = 1:20
     tmp = grid_load(gg_ind, :);
@@ -68,6 +69,15 @@ curtailed_ele = zeros(8760, 20);
 flexible_ele = zeros(8760, 20);
 shifted_ele = zeros(8760, 20, 20);
 consumed_ele = zeros(8760, 20);
+
+% 储能充放电追踪（用于 detail 输出）
+storage_discharge_ele = zeros(8760, 20);
+storage_charge_ele = zeros(8760, 20);
+
+% 原始风光发电量（用于 detail 输出）
+if want_detail
+    raw_vre_by_region = sum(grid_gens, 2);  % 用于验证
+end
 
 %% ======================== 5. 构建输电拓扑与路径 ========================
 trans_power = zeros(20, 20);
@@ -149,11 +159,13 @@ for time_ind = 1:8760
                 (storageCap(gg_ind) - stored_ele(time_ind, gg_ind)) / toStorageLoss);
             stored_ele(time_ind+1, gg_ind) = stored_ele(time_ind, gg_ind) + t_amount * toStorageLoss;
             curtailed_ele(time_ind, gg_ind) = d_g_s(gg_ind, 3) - t_amount;
+            storage_charge_ele(time_ind, gg_ind) = t_amount;
             d_g_s(gg_ind, 3) = 0;
         else  % 缺电 → 放电
             t_amount = min(min(storagePow(gg_ind) / fromStorageLoss, abs(d_g_s(gg_ind,3))), ...
                 stored_ele(time_ind, gg_ind));
             stored_ele(time_ind+1, gg_ind) = max(stored_ele(time_ind, gg_ind) - t_amount, 0);
+            storage_discharge_ele(time_ind, gg_ind) = t_amount;
             flexible_ele(time_ind, gg_ind) = abs(d_g_s(gg_ind, 3) + t_amount);
             d_g_s(gg_ind, 3) = 0;
         end
@@ -432,6 +444,48 @@ metrics.base_generation_twh        = base_generation_twh;
 metrics.flexible_generation_twh    = flexible_generation_twh;
 metrics.total_generation_twh       = total_generation_twh;
 metrics.curtailed_vre_twh          = curtailed_vre_twh;
+
+%% ======================== 10. 可选逐小时 detail 输出 ========================
+if want_detail
+    detail = struct();
+
+    % 时间字段
+    detail.hour_index = (1:8760);
+
+    % 图 A：发电侧原始出力
+    detail.raw_vre_generation_twh_hourly = sum(grid_gens, 1);
+    detail.load_twh_hourly = sum(loads_original, 1);
+
+    % 图 B：负荷侧供电结构 — 按区域构建
+    % 基荷：每区域每小时的恒定基荷
+    base_by_region_twh = zeros(20, 8760);
+    for gg_ind = 1:20
+        base_by_region_twh(gg_ind, :) = sum(loads_original(gg_ind, :)) * base_load_ratio / 8760;
+    end
+
+    % 灵活电源（已追踪）
+    flexible_by_region_twh = flexible_ele';  % 8760×20 → 20×8760
+
+    % 储能放电（已追踪）
+    storage_discharge_by_region_twh = storage_discharge_ele';  % 8760×20 → 20×8760
+
+    % 负荷侧实际风光供电量 = 负荷 - 储能放电 - 基荷 - 灵活电源
+    load_by_region_twh = loads_original;  % 20×8760
+    actual_vre_by_region_twh = load_by_region_twh ...
+        - storage_discharge_by_region_twh ...
+        - base_by_region_twh ...
+        - flexible_by_region_twh;
+    actual_vre_by_region_twh = max(actual_vre_by_region_twh, 0);
+
+    % 全球逐小时汇总
+    detail.actual_vre_generation_twh_hourly = sum(actual_vre_by_region_twh, 1);
+    detail.storage_discharge_twh_hourly = sum(storage_discharge_by_region_twh, 1);
+    detail.storage_charge_twh_hourly = sum(storage_charge_ele, 2)';
+    detail.base_generation_twh_hourly = sum(base_by_region_twh, 1);
+    detail.flexible_generation_twh_hourly = sum(flexible_by_region_twh, 1);
+    detail.curtailment_twh_hourly = sum(curtailed_ele, 2)';
+    detail.stored_energy_twh_hourly = sum(stored_ele, 2)';  % 1×8761
+end
 
 end
 
