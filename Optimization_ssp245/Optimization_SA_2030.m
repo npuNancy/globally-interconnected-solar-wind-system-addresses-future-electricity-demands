@@ -33,6 +33,7 @@ addpath(fullfile(script_dir, '..', 'utils'));
 addpath(script_dir);
 RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 cost_cfg = cost_model_config();
+cost_cfg.MAX_CURTAILMENT = MAX_CURTAILMENT;
 
 %% ======================== 1. 启动并行计算池 ========================
 % PARPOOL_NUM_WORKERS 在 optimization_config.m 中定义（默认 64，可通过环境变量覆盖）

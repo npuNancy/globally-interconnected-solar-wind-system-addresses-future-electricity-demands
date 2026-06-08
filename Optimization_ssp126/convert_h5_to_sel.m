@@ -20,6 +20,7 @@ addpath(fullfile(script_dir, '..', 'utils'));
 run('optimization_config.m');
 RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 cost_cfg = cost_model_config();
+cost_cfg.MAX_CURTAILMENT = MAX_CURTAILMENT;
 
 switch year
     case 2050
