@@ -28,7 +28,8 @@ function [c, ceq, constraint_names] = nonlcon2030(x, cost_cfg, scenario_cfg, mod
                 'interconnection_mode',       'S-A', ...
                 'min_vre_share',              MIN_VRE_SHARE_2030, ...
                 'max_vre_share',              MAX_VRE_SHARE_2030, ...
-                'allowed_unmet_wind_regions', ALLOWED_UNMET_WIND_REGIONS_2030 ...
+                'allowed_unmet_wind_regions', ALLOWED_UNMET_WIND_REGIONS_2030, ...
+                'allowed_unmet_solar_regions', ALLOWED_UNMET_SOLAR_REGIONS_2030 ...
             );
 
             data = load('results/model_data_2030.mat', 'model_data', 'persistent_data');
@@ -46,10 +47,14 @@ function [c, ceq, constraint_names] = nonlcon2030(x, cost_cfg, scenario_cfg, mod
     if ~isfield(scenario_cfg, 'allowed_unmet_wind_regions')
         scenario_cfg.allowed_unmet_wind_regions = 0;
     end
+    if ~isfield(scenario_cfg, 'allowed_unmet_solar_regions')
+        scenario_cfg.allowed_unmet_solar_regions = 0;
+    end
 
     min_vre = scenario_cfg.min_vre_share;
     max_vre = scenario_cfg.max_vre_share;
     allowed_unmet_wind = scenario_cfg.allowed_unmet_wind_regions;
+    allowed_unmet_solar = scenario_cfg.allowed_unmet_solar_regions;
 
     nonlcon_sel = persistent_data.nonlcon_sel;
     nonlcon_ins = persistent_data.nonlcon_ins;
@@ -80,8 +85,8 @@ function [c, ceq, constraint_names] = nonlcon2030(x, cost_cfg, scenario_cfg, mod
         tmp_solar(i) = sum(tmp_c(idx));
     end
     tmp_e = tmp_solar < cur_solar;
-    c(end+1) = sum(tmp_e);
-    constraint_names{end+1} = 'existing_solar_unmet_region_count';
+    c(end+1) = sum(tmp_e) - allowed_unmet_solar;
+    constraint_names{end+1} = 'existing_solar_unmet_region_count_minus_allowance';
 
     % --- 风电约束（允许若干区域不满足） ---
     tmp_a2 = x(nonlsol_n+1 : nonlsol_n+nonlwin_n);

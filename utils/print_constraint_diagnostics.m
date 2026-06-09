@@ -70,6 +70,9 @@ function zh_name = get_constraint_name_zh(en_name)
         case 'existing_solar_unmet_region_count'
             zh_name = '既有光伏装机未满足区域数量';
 
+        case 'existing_solar_unmet_region_count_minus_allowance'
+            zh_name = '既有光伏装机未满足区域数量减允许违反区域数';
+
         case 'existing_wind_unmet_region_count_minus_allowance'
             zh_name = '既有风电装机未满足区域数量减允许违反区域数';
 
