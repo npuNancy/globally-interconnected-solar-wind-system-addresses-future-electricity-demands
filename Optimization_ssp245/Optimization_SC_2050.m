@@ -234,7 +234,7 @@ initial_max_violation = init_feasibility.max_constraint_violation;
 
 fprintf('\n=== 构造初始种群 ===\n');
 initial_population = build_initial_population(greedy_sol, lb, ub, ...
-    POPULATION_SIZE, scenario_cfg, nonlsol, nonlwin);
+    POPULATION_SIZE, scenario_cfg, nonlsol, nonlwin, CGrid_Index);
 
 %% ======================== 9. 运行 GA 单目标优化 ========================
 T = datetime('now');
