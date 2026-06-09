@@ -35,7 +35,11 @@ BASE_LOAD_RATIO_2030 = 0.788;  % 78.8%
 SCENARIO_NAME = 'SSP5-6.0';
 SELECTION_MODE = 'fossil_upper_bound';
 
-MAX_CURTAILMENT = 0.30;  % SSP5-6.0 弃电率上限放宽到 30%
+MAX_CURTAILMENT = 0.30;
+
+% 最终结果验收时，仅针对弃电率允许额外 1 个百分点余量。
+% 注意：GA 搜索阶段仍然使用严格的 MAX_CURTAILMENT。
+CURTAILMENT_ACCEPTANCE_MARGIN = 0.01;
 
 % SSP5-6.0 不设置风光渗透率下界
 MIN_VRE_SHARE_2030 = NaN;

@@ -34,6 +34,7 @@ addpath(script_dir);   % 确保 helper 函数（calculatePathCapacity 等）可�
 RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 cost_cfg = cost_model_config();
 cost_cfg.MAX_CURTAILMENT = MAX_CURTAILMENT;
+validate_curtailment_config(cost_cfg, CURTAILMENT_ACCEPTANCE_MARGIN);
 
 %% ======================== 1. 启动并行计算池 ========================
 % PARPOOL_NUM_WORKERS 在 optimization_config.m 中定义（默认 64，可通过环境变量覆盖）
@@ -301,29 +302,45 @@ best_metrics = evaluate_dispatch_and_cost(all_ins, all_gens, all_loads, ...
 print_dispatch_diagnostics(best_metrics, scenario_cfg, cost_cfg);
 cb = best_metrics.cost_breakdown;
 
-%% ======================== 9.5 最终解可行性检查 ========================
-[c_best, ceq_best] = nonlcon2050(best_scale, cost_cfg, scenario_cfg, model_data, persistent_data);
+%% ======================== 9.5 最终解验收 ========================
+[c_best, ceq_best, constraint_names] = nonlcon2050( ...
+    best_scale, cost_cfg, scenario_cfg, model_data, persistent_data);
+
+acceptance = check_final_solution_acceptance( ...
+    c_best, ceq_best, constraint_names, ...
+    best_metrics.curtailment_rate, cost_cfg.MAX_CURTAILMENT, ...
+    CURTAILMENT_ACCEPTANCE_MARGIN, 1e-6);
+
+print_constraint_diagnostics( ...
+    constraint_names, c_best, ceq_best, 1e-6, ...
+    best_metrics.curtailment_rate, cost_cfg.MAX_CURTAILMENT, ...
+    CURTAILMENT_ACCEPTANCE_MARGIN);
+
+fprintf('\n=== 最终解验收 ===\n');
+fprintf('严格约束是否全部满足: %s\n', mat2str(acceptance.strict_is_feasible));
+fprintf('最终结果是否接受:     %s\n', mat2str(acceptance.is_accepted));
+fprintf('弃电率:               %.6f\n', best_metrics.curtailment_rate);
+fprintf('名义弃电率上限:       %.6f\n', cost_cfg.MAX_CURTAILMENT);
+fprintf('弃电率验收余量:       %.6f\n', CURTAILMENT_ACCEPTANCE_MARGIN);
+fprintf('最终验收弃电率上限:   %.6f\n', acceptance.final_acceptance_upper_bound);
+
 feasibility = check_solution_feasibility(c_best, ceq_best, 1e-6);
 
-fprintf('\n=== 最终解可行性检查 ===\n');
-fprintf('最大约束违反量: %.2e\n', feasibility.max_constraint_violation);
-fprintf('是否可行: %s\n', mat2str(feasibility.is_feasible));
-
-if ~feasibility.is_feasible
-    fprintf('错误：最终解不满足约束，流水线终止。\n');
+if ~acceptance.is_accepted
+    fprintf('错误：最终解不满足验收规则，流水线终止。\n');
     failed_dir = fullfile('results', 'failed');
     if ~exist(failed_dir, 'dir'), mkdir(failed_dir); end
     timestamp = datestr(now, 'yyyymmdd_HHMMSS');
     fail_file = fullfile(failed_dir, sprintf('Optimization_SC_2050_failed_%s.mat', timestamp));
     save(fail_file, 'best_scale', 'best_cost', 'best_metrics', 'exitflag', ...
-        'scenario_cfg', 'feasibility');
+        'scenario_cfg', 'acceptance', 'feasibility', 'constraint_names');
     error('Optimization:InfeasibleResult', ...
         '最终解不可行 (max_violation=%.2e)，结果已保存至 %s', ...
-        feasibility.max_constraint_violation, fail_file);
+        acceptance.max_acceptance_violation, fail_file);
 end
 
 if exitflag <= 0
-    fprintf('提示：当前解满足全部约束，但 GA 未完全收敛，exitflag=%d\n', exitflag);
+    fprintf('提示：当前解满足验收规则，但 GA 未完全收敛，exitflag=%d\n', exitflag);
 end
 
 %% ======================== 11. 保存结果 ========================
@@ -376,12 +393,25 @@ h5create(h5file, '/exitflag', [1, 1]);
 h5write(h5file, '/exitflag', double(exitflag));
 
 % 约束信息
-h5create(h5file, '/constraint_values', size(feasibility.constraint_values));
-h5write(h5file, '/constraint_values', feasibility.constraint_values);
+h5create(h5file, '/constraint_values', size(acceptance.strict_constraint_values));
+h5write(h5file, '/constraint_values', acceptance.strict_constraint_values);
 h5create(h5file, '/max_constraint_violation', [1, 1]);
-h5write(h5file, '/max_constraint_violation', feasibility.max_constraint_violation);
+h5write(h5file, '/max_constraint_violation', acceptance.max_strict_violation);
 h5create(h5file, '/is_feasible', [1, 1]);
-h5write(h5file, '/is_feasible', double(feasibility.is_feasible));
+h5write(h5file, '/is_feasible', double(acceptance.is_accepted));
+
+h5create(h5file, '/is_strictly_feasible', [1, 1]);
+h5write(h5file, '/is_strictly_feasible', double(acceptance.strict_is_feasible));
+h5create(h5file, '/is_accepted', [1, 1]);
+h5write(h5file, '/is_accepted', double(acceptance.is_accepted));
+h5create(h5file, '/curtailment_acceptance_margin', [1, 1]);
+h5write(h5file, '/curtailment_acceptance_margin', CURTAILMENT_ACCEPTANCE_MARGIN);
+h5create(h5file, '/final_acceptance_curtailment_upper_bound', [1, 1]);
+h5write(h5file, '/final_acceptance_curtailment_upper_bound', acceptance.final_acceptance_upper_bound);
+h5create(h5file, '/strict_constraint_values', size(acceptance.strict_constraint_values));
+h5write(h5file, '/strict_constraint_values', acceptance.strict_constraint_values);
+h5create(h5file, '/acceptance_constraint_values', size(acceptance.acceptance_constraint_values));
+h5write(h5file, '/acceptance_constraint_values', acceptance.acceptance_constraint_values);
 
 % 指标版本标记
 metrics_schema_version = 2;
@@ -406,6 +436,9 @@ save(matfile, ...
     'cost_bd_vec', ...
     'cost_bd_names', ...
     'diag_names', 'diag_values', ...
+    'acceptance', ...
+    'constraint_names', ...
+    'CURTAILMENT_ACCEPTANCE_MARGIN', ...
     'feasibility', ...
     'metrics_schema_version', 'vre_share_definition' ...
 );

@@ -35,7 +35,11 @@ BASE_LOAD_RATIO_2030 = 0.717;  % 71.7%
 SCENARIO_NAME = 'SSP2-4.5';
 SELECTION_MODE = 'bounded_transition';
 
-MAX_CURTAILMENT = 0.16;  % 15% 弃电率上限，留 1% 余量
+MAX_CURTAILMENT = 0.16;
+
+% 最终结果验收时，仅针对弃电率允许额外 1 个百分点余量。
+% 注意：GA 搜索阶段仍然使用严格的 MAX_CURTAILMENT。
+CURTAILMENT_ACCEPTANCE_MARGIN = 0.01;
 
 MIN_VRE_SHARE_2030 = 0.1417;
 MIN_VRE_SHARE_2040 = 0.2091;

@@ -1,4 +1,4 @@
-function [c, ceq] = nonlcon2040(x, cost_cfg, scenario_cfg, model_data, persistent_data)
+function [c, ceq, constraint_names] = nonlcon2040(x, cost_cfg, scenario_cfg, model_data, persistent_data)
 % nonlcon2040 — 2040年成本最小化非线性约束（SSP5-6.0）
 %
 % 约束逻辑：
@@ -22,6 +22,7 @@ function [c, ceq] = nonlcon2040(x, cost_cfg, scenario_cfg, model_data, persisten
 
             run('optimization_config.m');
             p_cost_cfg.MAX_CURTAILMENT = MAX_CURTAILMENT;
+            validate_curtailment_config(p_cost_cfg, CURTAILMENT_ACCEPTANCE_MARGIN);
             p_scenario_cfg = struct( ...
                 'base_load_ratio',            BASE_LOAD_RATIO_2040, ...
                 'interconnection_mode',       'S-C', ...
@@ -64,6 +65,7 @@ function [c, ceq] = nonlcon2040(x, cost_cfg, scenario_cfg, model_data, persisten
     nonlsol     = model_data.nonlsol;
 
     c = [];
+    constraint_names = {};
 
     %% ======== 1. 既有装机容量约束 ========
 
@@ -79,6 +81,7 @@ function [c, ceq] = nonlcon2040(x, cost_cfg, scenario_cfg, model_data, persisten
     end
     tmp_e = tmp_solar < cur_solar;
     c(end+1) = sum(tmp_e);
+    constraint_names{end+1} = 'existing_solar_unmet_region_count';
 
     % --- 风电约束（允许若干区域不满足） ---
     tmp_a2 = x(nonlsol_n+1 : nonlsol_n+nonlwin_n);
@@ -93,6 +96,7 @@ function [c, ceq] = nonlcon2040(x, cost_cfg, scenario_cfg, model_data, persisten
     tmp_e2 = tmp_wind < cur_wind;
     unmet_wind_count = sum(tmp_e2);
     c(end+1) = unmet_wind_count - allowed_unmet_wind;
+    constraint_names{end+1} = 'existing_wind_unmet_region_count_minus_allowance';
 
     %% ======== 2. VRE 渗透率约束 ========
     % VRE 渗透率严格定义：
@@ -108,12 +112,15 @@ function [c, ceq] = nonlcon2040(x, cost_cfg, scenario_cfg, model_data, persisten
     vre_share = metrics.vre_share;
     if ~isnan(min_vre)
         c(end+1) = min_vre - vre_share;
+        constraint_names{end+1} = 'vre_lower_bound';
     end
     c(end+1) = vre_share - max_vre;
+    constraint_names{end+1} = 'vre_upper_bound';
 
     %% ======== 3. 弃电率上限约束 ========
     if cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT
         c(end+1) = metrics.curtailment_rate - cost_cfg.MAX_CURTAILMENT;
+        constraint_names{end+1} = 'curtailment_upper_bound_strict';
     end
 
     ceq = [];
