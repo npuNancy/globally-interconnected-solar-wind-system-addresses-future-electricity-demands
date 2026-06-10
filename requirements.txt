@@ -16,3 +16,4 @@ pvlib
 windpowerlib
 numpy
 pymoo
+global-land-mask
