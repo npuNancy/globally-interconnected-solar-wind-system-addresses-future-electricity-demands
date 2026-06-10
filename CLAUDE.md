@@ -119,3 +119,5 @@ No YAML/JSON/TOML config files. All configuration is in MATLAB:
 
 ## 要求
 - plan mode 时，plan 使用中文撰写
+- `GlobalPotential_10km` 下代码的产物统一保存到 `GlobalPotential_10km/outputs/`。
+- 每次回复我时，都称呼我为 `小凯`，并且在回复的最后加上 `希望对你有帮助，小凯！`(不需要加反引号)。
