@@ -16,9 +16,9 @@
 
 示例
 ----
-  python S06_Global_Grid_Division.py
-  python S06_Global_Grid_Division.py --source tif
-  python S06_Global_Grid_Division.py --source mat
+  python S03_Global_Grid_Division.py
+  python S03_Global_Grid_Division.py --source tif
+  python S03_Global_Grid_Division.py --source mat
 """
 
 from __future__ import annotations

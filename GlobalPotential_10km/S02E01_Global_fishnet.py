@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-S04_Global_fishnet.py
+S02E01_Global_fishnet.py
 =====================
 
 使用 Python 包 ``global-land-mask`` 生成 ``Global_fishnet.tif`` 的可复现简化替代版本。
@@ -32,13 +32,13 @@ S04_Global_fishnet.py
 
 示例
 ----
-    python S04_Global_fishnet.py \\
+    python S02E01_Global_fishnet.py \\
         --output Global_fishnet.tif \\
         --print-stats
 
 与原始文件对比
 ------------
-    python S04_Global_fishnet.py \\
+    python S02E01_Global_fishnet.py \\
         --output Global_fishnet_global_land_mask.tif \\
         --reference Global_fishnet.tif \\
         --print-stats
@@ -329,7 +329,7 @@ def write_geotiff(
         ) as dst:
             dst.write(data, 1)
             dst.update_tags(
-                generated_by="S04_Global_fishnet.py",
+                generated_by="S02E01_Global_fishnet.py",
                 description=(
                     "简化的全球 1° 光伏候选陆地掩膜："
                     "普通陆地=0；海洋、格陵兰、南极洲=65536。"

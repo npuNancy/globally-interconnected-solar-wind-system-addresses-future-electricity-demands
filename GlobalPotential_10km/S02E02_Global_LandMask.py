@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-S05_Global_LandMask.py
+S02E02_Global_LandMask.py
 ======================
 
 使用 Python 包 ``global-land-mask`` 生成 ``Global_LandMask.tif`` 的可复现替代版本。
@@ -29,13 +29,13 @@ S05_Global_LandMask.py
 
 示例
 ----
-    python S05_Global_LandMask.py \\
+    python S02E02_Global_LandMask.py \\
         --output Global_LandMask.tif \\
         --print-stats
 
 与原始文件对比
 ------------
-    python S05_Global_LandMask.py \\
+    python S02E02_Global_LandMask.py \\
         --output Global_LandMask_global_land_mask.tif \\
         --reference Global_LandMask.tif \\
         --print-stats
@@ -189,7 +189,7 @@ def write_geotiff(
         ) as dst:
             dst.write(data, 1)
             dst.update_tags(
-                generated_by="S05_Global_LandMask.py",
+                generated_by="S02E02_Global_LandMask.py",
                 description="全球 1° 海陆掩膜：陆地=0；海洋=255。",
                 longitude_bounds="[-180, 180]",
                 latitude_bounds="[-90, 90]",
