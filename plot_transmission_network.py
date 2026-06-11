@@ -141,26 +141,21 @@ def load_trans_matrix(mat_path):
 # ════════════════════ 主程序 ════════════════════
 
 
-def main(dir_Optimization="Optimization_ssp126"):
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    data_dir = os.path.join(base_dir, dir_Optimization)
-    results_dir = os.path.join(data_dir, "results")
-    # 查找最新的 results_<timestamp> 子目录
-    if os.path.isdir(results_dir):
-        subdirs = sorted([
-            os.path.join(results_dir, d)
-            for d in os.listdir(results_dir)
-            if d.startswith("results_") and os.path.isdir(os.path.join(results_dir, d))
-        ])
-        if subdirs:
-            results_dir = subdirs[-1]
-    tif_path = os.path.join(data_dir, "Global_Grid_Division.tif")
+def run(opt_dir, res_dir, output_dir):
+    """绘制输电网络图。
+
+    Args:
+        opt_dir: 基础数据目录（含 Global_Grid_Division.tif, Global_fishnet.mat 等）
+        res_dir: 结果文件目录（含 Opt_*_Sel.mat）
+        output_dir: 输出图片保存目录
+    """
+    tif_path = os.path.join(opt_dir, "Global_Grid_Division.tif")
 
     # ── 读取区域地理数据 + 适宜网格掩码 ──
     region_grid, lons, lats = load_region_grid(tif_path)
 
     # 用适宜网格（太阳能+风能候选格网）过滤海洋像元，修正区域质心
-    suitable_mask = load_suitable_mask(data_dir)
+    suitable_mask = load_suitable_mask(opt_dir)
     region_grid[~suitable_mask] = np.nan
     print(f"  掩码后区域格网数: {int(np.sum(~np.isnan(region_grid)))}")
 
@@ -174,7 +169,7 @@ def main(dir_Optimization="Optimization_ssp126"):
     }
     trans_data = {}
     for year, (fname, title) in year_files.items():
-        fpath = os.path.join(results_dir, fname)
+        fpath = os.path.join(res_dir, fname)
         if os.path.exists(fpath):
             trans_data[year] = (load_trans_matrix(fpath), title)
             print(f"  已加载 {fname}")
@@ -327,14 +322,44 @@ def main(dir_Optimization="Optimization_ssp126"):
 
     # ── 保存 ──
     plt.subplots_adjust(bottom=0.24, top=0.93, wspace=0.04)
-    out_path = os.path.join(results_dir, "transmission_network.png")
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, "transmission_network.png")
     fig.savefig(out_path, dpi=300, bbox_inches="tight")
     print(f"\n图已保存至: {out_path}")
     plt.show()
 
 
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="全球输电网络可视化")
+    parser.add_argument("--opt-dir", type=str, default=None,
+                        help="基础数据目录（含 Global_Grid_Division.tif 等）")
+    parser.add_argument("--res-dir", type=str, default=None,
+                        help="结果文件目录（含 Opt_*_Sel.mat）")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="输出图片保存目录")
+    parser.add_argument("--legacy-dir", type=str, default=None,
+                        help="兼容旧模式：指定 Optimization 目录名（如 Optimization_ssp126）")
+    args = parser.parse_args()
+
+    if args.opt_dir and args.res_dir and args.output_dir:
+        run(args.opt_dir, args.res_dir, args.output_dir)
+    elif args.legacy_dir:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(base_dir, args.legacy_dir)
+        results_dir = os.path.join(data_dir, "results")
+        if os.path.isdir(results_dir):
+            subdirs = sorted([
+                os.path.join(results_dir, d)
+                for d in os.listdir(results_dir)
+                if d.startswith("results_") and os.path.isdir(os.path.join(results_dir, d))
+            ])
+            if subdirs:
+                results_dir = subdirs[-1]
+        run(data_dir, results_dir, results_dir)
+    else:
+        print("请指定 --opt-dir/--res-dir/--output-dir 或 --legacy-dir")
+
+
 if __name__ == "__main__":
-    # Optimization_ssp126
-    # Optimization_ssp245
-    # Optimization_ssp560
-    main("Optimization_ssp126")
+    main()
