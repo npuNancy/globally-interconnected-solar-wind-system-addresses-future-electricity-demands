@@ -58,12 +58,12 @@ MAX_VRE_SHARE_2050 = 0.1420;
 %   c_existing_wind = unmet_wind_region_count - ALLOWED_UNMET_WIND_REGIONS
 % 数据来源：与旧版 ConstraintTolerance 等价
 ALLOWED_UNMET_WIND_REGIONS_2050 = 0;   % 2050 完全不允许违反
-ALLOWED_UNMET_WIND_REGIONS_2040 = 4;   % 2040 允许 4 个风电区域不满足
+ALLOWED_UNMET_WIND_REGIONS_2040 = 5;   % 2040 允许 5 个风电区域不满足
 ALLOWED_UNMET_WIND_REGIONS_2030 = 8;   % 2030 允许 8 个风电区域不满足
 
 ALLOWED_UNMET_SOLAR_REGIONS_2050 = 0;  % 2050 完全不允许违反
-ALLOWED_UNMET_SOLAR_REGIONS_2040 = 1;  % 2040 允许 1 个光伏区域不满足
-ALLOWED_UNMET_SOLAR_REGIONS_2030 = 3;  % 2030 允许 3 个光伏区域不满足
+ALLOWED_UNMET_SOLAR_REGIONS_2040 = 6;  % 2040 允许 6 个光伏区域不满足
+ALLOWED_UNMET_SOLAR_REGIONS_2030 = 6;  % 2030 允许 6 个光伏区域不满足
 
 %% 6. GA 收敛参数
 MAX_STALL_GENERATIONS = 25;  % 连续 N 代最优解无改善则提前终止
