@@ -1,8 +1,10 @@
 # Custom
 .claude
 *.zip
+*.tif.bak
 *.tif
 *.mat
+*.mat.bak
 *.h5
 test.ipynb
 Data/CMIP6/*
