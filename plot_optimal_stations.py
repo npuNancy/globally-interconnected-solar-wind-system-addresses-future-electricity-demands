@@ -242,7 +242,49 @@ def plot_scenario(scenario_name, data_dir, results):
 # ══════════════════════════════════════════════════════════════════════
 
 
-def main():
+def run_single_scenario(scenario_name, opt_dir, res_dir, output_dir):
+    """单场景模式：指定 opt_dir（基础数据）、res_dir（结果文件）、output_dir（输出目录）。"""
+    os.makedirs(output_dir, exist_ok=True)
+
+    print(f"\n{'=' * 60}")
+    print(f"  {scenario_name}")
+    print(f"  opt_dir:   {opt_dir}")
+    print(f"  res_dir:   {res_dir}")
+    print(f"  output_dir:{output_dir}")
+    print(f"{'=' * 60}")
+
+    results = {}
+    for year in [2050, 2040, 2030]:
+        try:
+            data = get_stations(res_dir, year)
+            slon, slat, ns, wlon, wlat, nw = data
+            results[year] = data
+            print(f"  {year}: solar={ns:,}  wind={nw:,}")
+        except FileNotFoundError as e:
+            print(f"  {year}: {e}")
+
+    if results:
+        plot_scenario(scenario_name, output_dir, results)
+
+    # CSV 导出
+    cap_files = ["Global_Solar_Net_Area_Add_Egrid.mat", "Global_LandMask.mat"]
+    if all(os.path.exists(os.path.join(opt_dir, f)) for f in cap_files):
+        solar_cap, wind_cap = _build_capacity_grids(opt_dir)
+        cap_results = {}
+        for year in [2050, 2040, 2030]:
+            try:
+                data = get_stations_with_cap(res_dir, year, solar_cap, wind_cap)
+                cap_results[year] = data
+            except FileNotFoundError:
+                pass
+        if cap_results:
+            save_stations_csv(output_dir, scenario_name, cap_results)
+
+    return results
+
+
+def run_all_scenarios():
+    """原始多场景模式：遍历 SCENARIOS 字典。"""
     all_results = {}
 
     for scenario_name, rel_path in SCENARIOS.items():
@@ -260,41 +302,13 @@ def main():
         if subdirs:
             data_dir = subdirs[-1]
 
-        print(f"\n{'=' * 60}")
-        print(f"  {scenario_name}  ({data_dir})")
-        print(f"{'=' * 60}")
-
-        results = {}
-        for year in [2050, 2040, 2030]:
-            try:
-                data = get_stations(data_dir, year)
-                slon, slat, ns, wlon, wlat, nw = data
-                results[year] = data
-                print(f"  {year}: solar={ns:,}  wind={nw:,}")
-            except FileNotFoundError as e:
-                print(f"  {year}: {e}")
-
-        if results:
-            all_results[scenario_name] = results
-            plot_scenario(scenario_name, data_dir, results)
-
-        # CSV 导出：含装机容量
-        # data_dir 可能是 results/ 或 results/results_<timestamp>/，opt_dir 是 SSP 目录
         opt_dir = os.path.dirname(data_dir)
         if os.path.basename(opt_dir) == "results":
             opt_dir = os.path.dirname(opt_dir)
-        cap_files = ["Global_Solar_Net_Area_Add_Egrid.mat", "Global_LandMask.mat"]
-        if all(os.path.exists(os.path.join(opt_dir, f)) for f in cap_files):
-            solar_cap, wind_cap = _build_capacity_grids(opt_dir)
-            cap_results = {}
-            for year in [2050, 2040, 2030]:
-                try:
-                    data = get_stations_with_cap(data_dir, year, solar_cap, wind_cap)
-                    cap_results[year] = data
-                except FileNotFoundError:
-                    pass
-            if cap_results:
-                save_stations_csv(data_dir, scenario_name, cap_results)
+
+        results = run_single_scenario(scenario_name, opt_dir, data_dir, data_dir)
+        if results:
+            all_results[scenario_name] = results
 
     # 汇总
     print(f"\n{'=' * 60}")
@@ -312,6 +326,26 @@ def main():
             else:
                 row += f"  {'--/--':>12}   "
         print(row)
+
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="未来风光场站选址可视化")
+    parser.add_argument("--opt-dir", type=str, default=None,
+                        help="基础数据目录（含 Global_Solar_*.mat 等）")
+    parser.add_argument("--res-dir", type=str, default=None,
+                        help="结果文件目录（含 Opt_*_Sel.mat）")
+    parser.add_argument("--output-dir", type=str, default=None,
+                        help="输出目录（图片和 CSV 保存位置）")
+    parser.add_argument("--scenario-name", type=str, default=None,
+                        help="场景名称（如 SSP1-2.6）")
+    args = parser.parse_args()
+
+    if args.opt_dir and args.res_dir and args.output_dir:
+        name = args.scenario_name or os.path.basename(args.res_dir)
+        run_single_scenario(name, args.opt_dir, args.res_dir, args.output_dir)
+    else:
+        run_all_scenarios()
 
 
 if __name__ == "__main__":

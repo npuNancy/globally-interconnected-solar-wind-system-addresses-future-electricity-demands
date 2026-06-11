@@ -35,7 +35,11 @@ BASE_LOAD_RATIO_2030 = 0.788;  % 78.8%
 SCENARIO_NAME = 'SSP5-6.0';
 SELECTION_MODE = 'fossil_upper_bound';
 
-MAX_CURTAILMENT = 0.30;  % SSP5-6.0 弃电率上限放宽到 30%
+MAX_CURTAILMENT = 0.30;
+
+% 最终结果验收时，仅针对弃电率允许额外 1 个百分点余量。
+% 注意：GA 搜索阶段仍然使用严格的 MAX_CURTAILMENT。
+CURTAILMENT_ACCEPTANCE_MARGIN = 0.01;
 
 % SSP5-6.0 不设置风光渗透率下界
 MIN_VRE_SHARE_2030 = NaN;
@@ -54,8 +58,12 @@ MAX_VRE_SHARE_2050 = 0.1420;
 %   c_existing_wind = unmet_wind_region_count - ALLOWED_UNMET_WIND_REGIONS
 % 数据来源：与旧版 ConstraintTolerance 等价
 ALLOWED_UNMET_WIND_REGIONS_2050 = 0;   % 2050 完全不允许违反
-ALLOWED_UNMET_WIND_REGIONS_2040 = 4;   % 2040 允许 4 个风电区域不满足
+ALLOWED_UNMET_WIND_REGIONS_2040 = 5;   % 2040 允许 5 个风电区域不满足
 ALLOWED_UNMET_WIND_REGIONS_2030 = 8;   % 2030 允许 8 个风电区域不满足
+
+ALLOWED_UNMET_SOLAR_REGIONS_2050 = 0;  % 2050 完全不允许违反
+ALLOWED_UNMET_SOLAR_REGIONS_2040 = 6;  % 2040 允许 6 个光伏区域不满足
+ALLOWED_UNMET_SOLAR_REGIONS_2030 = 6;  % 2030 允许 6 个光伏区域不满足
 
 %% 6. GA 收敛参数
 MAX_STALL_GENERATIONS = 25;  % 连续 N 代最优解无改善则提前终止

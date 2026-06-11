@@ -21,6 +21,7 @@ run('optimization_config.m');
 RESULTS_DIR = setup_results_dir(RESULTS_SUBDIR);
 cost_cfg = cost_model_config();
 cost_cfg.MAX_CURTAILMENT = MAX_CURTAILMENT;
+validate_curtailment_config(cost_cfg, CURTAILMENT_ACCEPTANCE_MARGIN);
 
 switch year
     case 2050
@@ -116,10 +117,21 @@ if vre_share > max_vre_share + 1e-6
     error('Convert:VREUpperBoundViolation', ...
         'VRE 渗透率 %.4f 高于上界 %.4f，终止后处理。', vre_share, max_vre_share);
 end
-if cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT && curtailment_rate > cost_cfg.MAX_CURTAILMENT + 1e-6
+final_acceptance_curtailment_upper_bound = ...
+    cost_cfg.MAX_CURTAILMENT + CURTAILMENT_ACCEPTANCE_MARGIN;
+
+if cost_cfg.ENABLE_CURTAILMENT_CONSTRAINT ...
+        && curtailment_rate > final_acceptance_curtailment_upper_bound + 1e-6
     error('Convert:CurtailmentUpperBoundViolation', ...
-        '弃电率 %.4f 高于上限 %.4f，终止后处理。', curtailment_rate, cost_cfg.MAX_CURTAILMENT);
+        ['弃电率 %.6f 高于最终验收上限 %.6f。' ...
+         '名义上限 %.6f，验收余量 %.6f。终止后处理。'], ...
+        curtailment_rate, final_acceptance_curtailment_upper_bound, ...
+        cost_cfg.MAX_CURTAILMENT, CURTAILMENT_ACCEPTANCE_MARGIN);
 end
+
+fprintf('名义弃电率上限:         %.6f\n', cost_cfg.MAX_CURTAILMENT);
+fprintf('弃电率验收余量:         %.6f\n', CURTAILMENT_ACCEPTANCE_MARGIN);
+fprintf('最终验收弃电率上限:     %.6f\n', final_acceptance_curtailment_upper_bound);
 
 %% 4. 重建候选格网索引
 

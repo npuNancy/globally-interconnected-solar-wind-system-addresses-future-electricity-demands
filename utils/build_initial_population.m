@@ -1,5 +1,5 @@
 function population = build_initial_population(greedy_sol, lb, ub, pop_size, ...
-    scenario_cfg, nonlsol, nonlwin)
+    scenario_cfg, nonlsol, nonlwin, CGrid_Index)
 % BUILD_INITIAL_POPULATION — 构造初始种群矩阵
 %
 % 种群组成：
@@ -15,12 +15,17 @@ function population = build_initial_population(greedy_sol, lb, ub, pop_size, ...
 %   scenario_cfg — 情景配置
 %   nonlsol      — 光伏候选格网数量
 %   nonlwin      — 风电候选格网数量
+%   CGrid_Index  — 候选格网索引矩阵，第1列为区域编号
 %
 % 输出：
 %   population   — pop_size × nvars 矩阵
 
     nvars = length(lb);
     n_grid = nonlsol + nonlwin;  % 场站选择变量数
+
+    % 提取每个候选格网所属区域
+    pv_regions = CGrid_Index(1:nonlsol, 1);
+    wind_regions = CGrid_Index(nonlsol+1:nonlsol+nonlwin, 1);
 
     % 计算各类解的数量
     n_greedy = max(1, round(pop_size * 0.01));  % 至少 1 个
@@ -38,42 +43,46 @@ function population = build_initial_population(greedy_sol, lb, ub, pop_size, ...
     end
 
     %% 2. 小扰动解（50%）
-    % 在同一区域内交换格网，避免破坏装机约束
+    % 在同一区域、同一种技术类型内部：
+    %   删除一个已选格网，增加一个未选格网
+    % 保持区域内场站数量不变，只改变空间位置
     for i = 1:n_perturb
         sol = greedy_sol;
 
-        % 随机选择 5-15% 的场站进行扰动
+        % 随机选择 5%-15% 的场站进行扰动
         n_swap = randi([round(n_grid * 0.05), round(n_grid * 0.15)]);
 
         for j = 1:n_swap
-            % 随机选择一个区域
+            % 随机选择区域
             region = randi(20);
 
-            % 在该区域内随机交换一个场站
-            % 优先选择同类型（光伏或风电）
+            % 50% 概率扰动光伏，50% 概率扰动风电
             if rand() < 0.5
-                % 光伏
-                region_grids = find(sol(1:nonlsol) == region | ...
-                    (sol(1:nonlsol) == 0 & region == 1));  % 简化：只考虑区域1
+                % 光伏候选格网
+                region_grids = find(pv_regions == region);
             else
-                % 风电
-                region_grids = find(sol(nonlsol+1:nonlsol+nonlwin) == region);
-                if ~isempty(region_grids)
-                    region_grids = region_grids + nonlsol;
-                end
+                % 风电候选格网
+                region_grids = find(wind_regions == region);
+                region_grids = region_grids + nonlsol;
             end
 
-            if ~isempty(region_grids) && length(region_grids) > 1
-                % 随机选择两个格网交换状态
-                swap_idx = randperm(length(region_grids), 2);
-                g1 = region_grids(swap_idx(1));
-                g2 = region_grids(swap_idx(2));
-                sol(g1) = 1 - sol(g1);
-                sol(g2) = 1 - sol(g2);
+            selected_grids = ...
+                region_grids(sol(region_grids) == 1);
+            unselected_grids = ...
+                region_grids(sol(region_grids) == 0);
+
+            if ~isempty(selected_grids) ...
+                    && ~isempty(unselected_grids)
+                g_selected = ...
+                    selected_grids(randi(length(selected_grids)));
+                g_unselected = ...
+                    unselected_grids(randi(length(unselected_grids)));
+                sol(g_selected) = 0;
+                sol(g_unselected) = 1;
             end
         end
 
-        % 储能和输电保持贪心解的值（避免破坏约束）
+        % 储能和输电保持贪心解的值
         population(idx, :) = sol;
         idx = idx + 1;
     end
