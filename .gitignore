@@ -22,6 +22,9 @@ Optimization_ssp126_test_capacity/results/
 
 ref_code
 
+**inputs/
+**outputs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
