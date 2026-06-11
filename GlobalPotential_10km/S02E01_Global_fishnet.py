@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 S02E01_Global_fishnet.py
-=====================
+========================
 
 使用 Python 包 ``global-land-mask`` 生成 ``Global_fishnet.tif`` 的可复现简化替代版本。
 
@@ -20,10 +20,11 @@ S02E01_Global_fishnet.py
 
 空间网格
 --------
-- 全球 1°×1° 栅格
+- 全球 0.1° × 0.1° 栅格
+- 栅格大小：1800 × 3600
 - 经度范围：[-180, 180]
 - 纬度范围：[-90, 90]
-- 像元中心：lon=-179.5,...,179.5；lat=89.5,...,-89.5
+- 像元中心：lon=-179.95,...,179.95；lat=89.95,...,-89.95
 - CRS：EPSG:4326
 
 依赖
@@ -32,16 +33,19 @@ S02E01_Global_fishnet.py
 
 示例
 ----
-    python S02E01_Global_fishnet.py \\
-        --output Global_fishnet.tif \\
+    python S02E01_Global_fishnet.py \
+        --output outputs/Global_fishnet.tif \
         --print-stats
 
-与原始文件对比
-------------
-    python S02E01_Global_fishnet.py \\
-        --output Global_fishnet_global_land_mask.tif \\
-        --reference Global_fishnet.tif \\
+与原始 1° 参考文件对比
+--------------------
+    python S02E01_Global_fishnet.py \
+        --output outputs/Global_fishnet.tif \
+        --reference Global_fishnet_original_1deg.tif \
         --print-stats
+
+当参考文件为 180 × 360 时，脚本会先把生成的 0.1° 布尔掩膜按
+10 × 10 窗口 majority 聚合回 1°，再进行诊断性比较。
 """
 
 from __future__ import annotations
@@ -56,11 +60,11 @@ import numpy as np
 # ── 输出目录 ──────────────────────────────────────────────────────────────
 _OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 
-WIDTH = 360
-HEIGHT = 180
+WIDTH = 3600
+HEIGHT = 1800
 WEST = -180.0
 NORTH = 90.0
-RESOLUTION = 1.0
+RESOLUTION = 0.1
 CRS = "EPSG:4326"
 
 VALID_LAND_VALUE = np.uint32(0)
@@ -76,7 +80,7 @@ GREENLAND_LON_MAX = -10.0
 GREENLAND_SEED_LAT = 72.5
 GREENLAND_SEED_LON = -40.5
 
-# 南极洲排除规则。1° 分辨率下此简单纬度规则清晰且可复现。
+# 南极洲排除规则。0.1° 分辨率下，此简单纬度规则清晰且可复现。
 ANTARCTICA_MAX_LAT = -60.0
 
 
@@ -105,18 +109,19 @@ def _import_global_land_mask():
     return globe
 
 
-def build_global_1deg_centers() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def build_global_0p1deg_centers() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    返回全球 1° 栅格的一维和二维像元中心坐标。
+    返回全球 0.1° 栅格的一维和二维像元中心坐标。
 
     Returns
     -------
     lats, lons, lat_grid, lon_grid
         ``lats`` 由北向南排列，``lons`` 由西向东排列。
-        ``lat_grid`` 和 ``lon_grid`` 形状均为 ``(180, 360)``。
+        ``lat_grid`` 和 ``lon_grid`` 形状均为 ``(1800, 3600)``。
     """
-    lons = np.arange(-179.5, 180.0, RESOLUTION, dtype=np.float64)
-    lats = np.arange(89.5, -90.0, -RESOLUTION, dtype=np.float64)
+    # 使用整数索引构造中心点，避免 np.arange 浮点终点误差导致数组长度异常。
+    lons = WEST + (np.arange(WIDTH, dtype=np.float64) + 0.5) * RESOLUTION
+    lats = NORTH - (np.arange(HEIGHT, dtype=np.float64) + 0.5) * RESOLUTION
 
     if lons.size != WIDTH or lats.size != HEIGHT:
         raise AssertionError(
@@ -132,8 +137,7 @@ def get_global_land_mask(lat_grid: np.ndarray, lon_grid: np.ndarray) -> np.ndarr
     """使用 ``global_land_mask.globe.is_land`` 返回布尔海陆掩膜。"""
     if lat_grid.shape != lon_grid.shape:
         raise ValueError(
-            f"经纬度网格形状必须一致，得到 "
-            f"{lat_grid.shape} 和 {lon_grid.shape}。"
+            f"经纬度网格形状必须一致，得到 {lat_grid.shape} 和 {lon_grid.shape}。"
         )
 
     globe = _import_global_land_mask()
@@ -141,8 +145,7 @@ def get_global_land_mask(lat_grid: np.ndarray, lon_grid: np.ndarray) -> np.ndarr
 
     if is_land.shape != lat_grid.shape:
         raise RuntimeError(
-            f"global-land-mask 返回形状 {is_land.shape}；"
-            f"预期 {lat_grid.shape}。"
+            f"global-land-mask 返回形状 {is_land.shape}；预期 {lat_grid.shape}。"
         )
     return is_land
 
@@ -158,26 +161,15 @@ def flood_fill_4_connected(mask: np.ndarray, seed_row: int, seed_col: int) -> np
     """
     返回包含 ``(seed_row, seed_col)`` 的四邻域连通分量。
 
-    Parameters
-    ----------
-    mask
-        布尔候选掩膜。
-    seed_row, seed_col
-        种子像元索引。
-
-    Notes
-    -----
-    刻意使用四邻域而非八邻域，以降低 1° 分辨率下穿越狭窄对角缝隙
-    将不同岛屿错误连通的风险。
+    刻意使用四邻域而非八邻域，以降低穿越狭窄对角缝隙、将不同岛屿错误
+    连通的风险。
     """
     if mask.ndim != 2:
         raise ValueError(f"mask 必须为二维，得到形状 {mask.shape}。")
 
     nrows, ncols = mask.shape
     if not (0 <= seed_row < nrows and 0 <= seed_col < ncols):
-        raise IndexError(
-            f"种子点 ({seed_row}, {seed_col}) 超出掩膜范围 {mask.shape}。"
-        )
+        raise IndexError(f"种子点 ({seed_row}, {seed_col}) 超出掩膜范围 {mask.shape}。")
     if not bool(mask[seed_row, seed_col]):
         raise ValueError(
             "格陵兰种子点未被 global-land-mask 判定为陆地。"
@@ -216,9 +208,7 @@ def build_greenland_mask(
     seed_lat: float = GREENLAND_SEED_LAT,
     seed_lon: float = GREENLAND_SEED_LON,
 ) -> np.ndarray:
-    """
-    通过包围盒 + 四邻域洪泛填充识别格陵兰。
-    """
+    """通过包围盒 + 四邻域洪泛填充识别格陵兰。"""
     if not (is_land.shape == lat_grid.shape == lon_grid.shape):
         raise ValueError("is_land、lat_grid、lon_grid 形状必须一致。")
 
@@ -264,6 +254,8 @@ def build_global_fishnet(
     """
     if not (is_land.shape == lat_grid.shape == lon_grid.shape):
         raise ValueError("is_land、lat_grid、lon_grid 形状必须一致。")
+    if is_land.shape != (HEIGHT, WIDTH):
+        raise ValueError(f"预期掩膜形状 {(HEIGHT, WIDTH)}，得到 {is_land.shape}。")
 
     fishnet = np.full(is_land.shape, INVALID_VALUE, dtype=np.uint32)
     fishnet[is_land] = VALID_LAND_VALUE
@@ -285,25 +277,15 @@ def build_global_fishnet(
     return fishnet, greenland_mask, antarctica_mask
 
 
-def write_geotiff(
-    output_path: Path,
-    data: np.ndarray,
-    *,
-    overwrite: bool,
-) -> None:
+def write_geotiff(output_path: Path, data: np.ndarray, *, overwrite: bool) -> None:
     """将 fishnet 数组写入带地理参考的 GeoTIFF 文件。"""
     if data.shape != (HEIGHT, WIDTH):
-        raise ValueError(
-            f"预期输出形状 {(HEIGHT, WIDTH)}，得到 {data.shape}。"
-        )
+        raise ValueError(f"预期输出形状 {(HEIGHT, WIDTH)}，得到 {data.shape}。")
     if data.dtype != np.uint32:
         raise TypeError(f"预期 uint32 数据，得到 {data.dtype}。")
 
     if output_path.exists() and not overwrite:
-        raise FileExistsError(
-            f"输出文件已存在：{output_path}\n"
-            "使用 --overwrite 覆盖。"
-        )
+        raise FileExistsError(f"输出文件已存在：{output_path}\n使用 --overwrite 覆盖。")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     rasterio, from_origin = _import_rasterio()
@@ -331,11 +313,13 @@ def write_geotiff(
             dst.update_tags(
                 generated_by="S02E01_Global_fishnet.py",
                 description=(
-                    "简化的全球 1° 光伏候选陆地掩膜："
+                    "简化的全球 0.1° 光伏候选陆地掩膜："
                     "普通陆地=0；海洋、格陵兰、南极洲=65536。"
                 ),
                 longitude_bounds="[-180, 180]",
                 latitude_bounds="[-90, 90]",
+                resolution_degrees="0.1",
+                raster_shape="1800x3600",
                 source="global-land-mask",
             )
         temp_path.replace(output_path)
@@ -352,27 +336,51 @@ def print_stats(
     antarctica_mask: np.ndarray,
 ) -> None:
     """打印基本生成统计信息。"""
-    total_cells = fishnet.size
-    land_before = int(np.count_nonzero(is_land))
-    ocean_cells = int(np.count_nonzero(~is_land))
-    greenland_excluded = int(np.count_nonzero(greenland_mask))
-    antarctica_land_excluded = int(np.count_nonzero(antarctica_mask & is_land))
-    valid_after = int(np.count_nonzero(fishnet < INVALID_VALUE))
-    invalid_after = int(np.count_nonzero(fishnet == INVALID_VALUE))
-
     print("生成统计")
     print("--------")
-    print(f"总格网数                      : {total_cells}")
-    print(f"排除前陆地格网数              : {land_before}")
-    print(f"海洋格网数                    : {ocean_cells}")
-    print(f"格陵兰排除的陆地格网数        : {greenland_excluded}")
-    print(f"南极洲排除的陆地格网数        : {antarctica_land_excluded}")
-    print(f"排除后有效 fishnet 格网数     : {valid_after}")
-    print(f"无效格网数                    : {invalid_after}")
+    print(f"总格网数                      : {fishnet.size}")
+    print(f"排除前陆地格网数              : {int(np.count_nonzero(is_land))}")
+    print(f"海洋格网数                    : {int(np.count_nonzero(~is_land))}")
+    print(f"格陵兰排除的陆地格网数        : {int(np.count_nonzero(greenland_mask))}")
+    print(f"南极洲排除的陆地格网数        : {int(np.count_nonzero(antarctica_mask & is_land))}")
+    print(f"排除后有效 fishnet 格网数     : {int(np.count_nonzero(fishnet < INVALID_VALUE))}")
+    print(f"无效格网数                    : {int(np.count_nonzero(fishnet == INVALID_VALUE))}")
+
+
+def coarsen_boolean_majority(mask: np.ndarray, target_shape: tuple[int, int]) -> np.ndarray:
+    """
+    将细网格布尔掩膜按整数窗口聚合到目标形状。
+
+    一个目标格网中至少 50% 的子格网为 True 时，聚合结果为 True。
+    """
+    if mask.ndim != 2:
+        raise ValueError(f"mask 必须为二维，得到 {mask.shape}。")
+    if mask.shape == target_shape:
+        return mask
+
+    target_rows, target_cols = target_shape
+    if target_rows <= 0 or target_cols <= 0:
+        raise ValueError(f"目标形状非法：{target_shape}。")
+    if mask.shape[0] % target_rows != 0 or mask.shape[1] % target_cols != 0:
+        raise ValueError(
+            f"无法将形状 {mask.shape} 按整数窗口聚合到 {target_shape}。"
+        )
+
+    row_factor = mask.shape[0] // target_rows
+    col_factor = mask.shape[1] // target_cols
+    if row_factor < 1 or col_factor < 1:
+        raise ValueError(
+            f"只支持从细网格聚合到粗网格，得到 {mask.shape} -> {target_shape}。"
+        )
+
+    fractions = mask.reshape(
+        target_rows, row_factor, target_cols, col_factor
+    ).mean(axis=(1, 3))
+    return fractions >= 0.5
 
 
 def compare_with_reference(generated: np.ndarray, reference_path: Path) -> None:
-    """将生成的有效格网掩膜与原始 fishnet GeoTIFF 对比。"""
+    """将生成的有效格网掩膜与原始 fishnet GeoTIFF 做诊断性对比。"""
     if not reference_path.exists():
         raise FileNotFoundError(f"参考文件不存在：{reference_path}")
 
@@ -380,39 +388,39 @@ def compare_with_reference(generated: np.ndarray, reference_path: Path) -> None:
     with rasterio.open(reference_path) as ds:
         reference = ds.read(1)
 
-    if reference.shape != generated.shape:
-        raise ValueError(
-            f"参考文件形状 {reference.shape} 与生成结果形状 "
-            f"{generated.shape} 不一致。"
-        )
-
-    generated_valid = generated < INVALID_VALUE
+    generated_valid_fine = generated < INVALID_VALUE
+    generated_valid = coarsen_boolean_majority(generated_valid_fine, reference.shape)
     reference_valid = reference < NODATA_VALUE
 
     same = int(np.count_nonzero(generated_valid == reference_valid))
     different = int(np.count_nonzero(generated_valid != reference_valid))
     generated_only = int(np.count_nonzero(generated_valid & ~reference_valid))
     reference_only = int(np.count_nonzero(~generated_valid & reference_valid))
-    agreement = same / generated.size
+    agreement = same / reference.size
 
     print()
     print("与原始文件对比")
     print("--------------")
-    print(f"参考文件               : {reference_path}")
-    print(f"生成结果有效格网数     : {int(np.count_nonzero(generated_valid))}")
-    print(f"参考文件有效格网数     : {int(np.count_nonzero(reference_valid))}")
-    print(f"一致格网数             : {same}")
-    print(f"不一致格网数           : {different}")
-    print(f"仅生成结果有效         : {generated_only}")
-    print(f"仅参考文件有效         : {reference_only}")
-    print(f"一致率                 : {agreement:.6f}")
+    print(f"参考文件                         : {reference_path}")
+    print(f"生成结果原始形状                 : {generated.shape}")
+    print(f"参考文件形状                     : {reference.shape}")
+    if generated.shape != reference.shape:
+        print("比较前处理                       : majority 聚合到参考文件形状")
+    print(f"生成结果细网格有效数             : {int(np.count_nonzero(generated_valid_fine))}")
+    print(f"生成结果聚合后有效数             : {int(np.count_nonzero(generated_valid))}")
+    print(f"参考文件有效格网数               : {int(np.count_nonzero(reference_valid))}")
+    print(f"一致格网数                       : {same}")
+    print(f"不一致格网数                     : {different}")
+    print(f"仅生成结果有效                   : {generated_only}")
+    print(f"仅参考文件有效                   : {reference_only}")
+    print(f"一致率                           : {agreement:.6f}")
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     """解析命令行参数。"""
     parser = argparse.ArgumentParser(
         description=(
-            "使用 global-land-mask 生成 Global_fishnet.tif。"
+            "使用 global-land-mask 生成 0.1° Global_fishnet.tif。"
             "普通陆地=0；海洋、格陵兰、南极洲=65536。"
         )
     )
@@ -420,19 +428,15 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         "--output",
         type=Path,
         default=_OUTPUT_DIR / "Global_fishnet.tif",
-        help="输出 GeoTIFF 路径（默认：GlobalPotential_10km/outputs/Global_fishnet.tif）",
+        help="输出 GeoTIFF 路径（默认：脚本同目录 outputs/Global_fishnet.tif）",
     )
     parser.add_argument(
         "--reference",
         type=Path,
         default=None,
-        help="可选的原始 GeoTIFF，仅用于对比统计。",
+        help="可选原始参考 GeoTIFF。允许使用论文仓库中的 1° 文件，仅用于诊断性对比。",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="覆盖已有输出文件。",
-    )
+    parser.add_argument("--overwrite", action="store_true", help="覆盖已有输出文件。")
     parser.add_argument(
         "--print-stats",
         "--print_stats",
@@ -447,7 +451,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     """命令行入口。"""
     args = parse_args(argv)
 
-    _, _, lat_grid, lon_grid = build_global_1deg_centers()
+    _, _, lat_grid, lon_grid = build_global_0p1deg_centers()
     is_land = get_global_land_mask(lat_grid, lon_grid)
     fishnet, greenland_mask, antarctica_mask = build_global_fishnet(
         is_land, lat_grid, lon_grid

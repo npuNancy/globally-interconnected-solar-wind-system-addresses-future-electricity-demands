@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 S02E02_Global_LandMask.py
-======================
+========================
 
 使用 Python 包 ``global-land-mask`` 生成 ``Global_LandMask.tif`` 的可复现替代版本。
 
@@ -17,10 +17,11 @@ S02E02_Global_LandMask.py
 
 空间网格
 --------
-- 全球 1°×1° 栅格
+- 全球 0.1° × 0.1° 栅格
+- 栅格大小：1800 × 3600
 - 经度范围：[-180, 180]
 - 纬度范围：[-90, 90]
-- 像元中心：lon=-179.5,...,179.5；lat=89.5,...,-89.5
+- 像元中心：lon=-179.95,...,179.95；lat=89.95,...,-89.95
 - CRS：EPSG:4326
 
 依赖
@@ -29,16 +30,19 @@ S02E02_Global_LandMask.py
 
 示例
 ----
-    python S02E02_Global_LandMask.py \\
-        --output Global_LandMask.tif \\
+    python S02E02_Global_LandMask.py \
+        --output outputs/Global_LandMask.tif \
         --print-stats
 
-与原始文件对比
-------------
-    python S02E02_Global_LandMask.py \\
-        --output Global_LandMask_global_land_mask.tif \\
-        --reference Global_LandMask.tif \\
+与原始 1° 参考文件对比
+--------------------
+    python S02E02_Global_LandMask.py \
+        --output outputs/Global_LandMask.tif \
+        --reference Global_LandMask_original_1deg.tif \
         --print-stats
+
+当参考文件为 180 × 360 时，脚本会先把生成的 0.1° 布尔掩膜按
+10 × 10 窗口 majority 聚合回 1°，再进行诊断性比较。
 """
 
 from __future__ import annotations
@@ -52,11 +56,11 @@ import numpy as np
 # ── 输出目录 ──────────────────────────────────────────────────────────────
 _OUTPUT_DIR = Path(__file__).resolve().parent / "outputs"
 
-WIDTH = 360
-HEIGHT = 180
+WIDTH = 3600
+HEIGHT = 1800
 WEST = -180.0
 NORTH = 90.0
-RESOLUTION = 1.0
+RESOLUTION = 0.1
 CRS = "EPSG:4326"
 
 LAND_VALUE = np.uint8(0)
@@ -69,7 +73,7 @@ def _import_rasterio():
     try:
         import rasterio
         from rasterio.transform import from_origin
-    except ImportError as exc:
+    except ImportError as exc:  # pragma: no cover - 环境相关
         raise RuntimeError(
             "缺少依赖 'rasterio'，请安装：\n"
             "  pip install rasterio"
@@ -81,7 +85,7 @@ def _import_global_land_mask():
     """延迟导入 global-land-mask 并返回其 ``globe`` 模块。"""
     try:
         from global_land_mask import globe
-    except ImportError as exc:
+    except ImportError as exc:  # pragma: no cover - 环境相关
         raise RuntimeError(
             "缺少依赖 'global-land-mask'，请安装：\n"
             "  pip install global-land-mask"
@@ -89,18 +93,19 @@ def _import_global_land_mask():
     return globe
 
 
-def build_global_1deg_centers() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def build_global_0p1deg_centers() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    返回全球 1° 栅格的一维和二维像元中心坐标。
+    返回全球 0.1° 栅格的一维和二维像元中心坐标。
 
     Returns
     -------
     lats, lons, lat_grid, lon_grid
         ``lats`` 由北向南排列，``lons`` 由西向东排列。
-        ``lat_grid`` 和 ``lon_grid`` 形状均为 ``(180, 360)``。
+        ``lat_grid`` 和 ``lon_grid`` 形状均为 ``(1800, 3600)``。
     """
-    lons = np.arange(-179.5, 180.0, RESOLUTION, dtype=np.float64)
-    lats = np.arange(89.5, -90.0, -RESOLUTION, dtype=np.float64)
+    # 使用整数索引构造中心点，避免 np.arange 浮点终点误差导致数组长度异常。
+    lons = WEST + (np.arange(WIDTH, dtype=np.float64) + 0.5) * RESOLUTION
+    lats = NORTH - (np.arange(HEIGHT, dtype=np.float64) + 0.5) * RESOLUTION
 
     if lons.size != WIDTH or lats.size != HEIGHT:
         raise AssertionError(
@@ -116,8 +121,7 @@ def get_global_land_mask(lat_grid: np.ndarray, lon_grid: np.ndarray) -> np.ndarr
     """使用 ``global_land_mask.globe.is_land`` 返回布尔海陆掩膜。"""
     if lat_grid.shape != lon_grid.shape:
         raise ValueError(
-            f"经纬度网格形状必须一致，得到 "
-            f"{lat_grid.shape} 和 {lon_grid.shape}。"
+            f"经纬度网格形状必须一致，得到 {lat_grid.shape} 和 {lon_grid.shape}。"
         )
 
     globe = _import_global_land_mask()
@@ -125,8 +129,7 @@ def get_global_land_mask(lat_grid: np.ndarray, lon_grid: np.ndarray) -> np.ndarr
 
     if is_land.shape != lat_grid.shape:
         raise RuntimeError(
-            f"global-land-mask 返回形状 {is_land.shape}；"
-            f"预期 {lat_grid.shape}。"
+            f"global-land-mask 返回形状 {is_land.shape}；预期 {lat_grid.shape}。"
         )
     return is_land
 
@@ -150,12 +153,7 @@ def build_global_landmask(is_land: np.ndarray) -> np.ndarray:
     return landmask
 
 
-def write_geotiff(
-    output_path: Path,
-    data: np.ndarray,
-    *,
-    overwrite: bool,
-) -> None:
+def write_geotiff(output_path: Path, data: np.ndarray, *, overwrite: bool) -> None:
     """将海陆掩膜数组写入带地理参考的 GeoTIFF 文件。"""
     if data.shape != (HEIGHT, WIDTH):
         raise ValueError(f"预期输出形状 {(HEIGHT, WIDTH)}，得到 {data.shape}。")
@@ -190,9 +188,11 @@ def write_geotiff(
             dst.write(data, 1)
             dst.update_tags(
                 generated_by="S02E02_Global_LandMask.py",
-                description="全球 1° 海陆掩膜：陆地=0；海洋=255。",
+                description="全球 0.1° 海陆掩膜：陆地=0；海洋=255。",
                 longitude_bounds="[-180, 180]",
                 latitude_bounds="[-90, 90]",
+                resolution_degrees="0.1",
+                raster_shape="1800x3600",
                 source="global-land-mask",
             )
         temp_path.replace(output_path)
@@ -204,19 +204,47 @@ def write_geotiff(
 
 def print_stats(landmask: np.ndarray, is_land: np.ndarray) -> None:
     """打印基本生成统计信息。"""
-    total_cells = landmask.size
-    land_cells = int(np.count_nonzero(is_land))
-    ocean_cells = int(np.count_nonzero(~is_land))
-
     print("生成统计")
     print("--------")
-    print(f"总格网数 : {total_cells}")
-    print(f"陆地格网 : {land_cells}")
-    print(f"海洋格网 : {ocean_cells}")
+    print(f"总格网数 : {landmask.size}")
+    print(f"陆地格网 : {int(np.count_nonzero(is_land))}")
+    print(f"海洋格网 : {int(np.count_nonzero(~is_land))}")
+
+
+def coarsen_boolean_majority(mask: np.ndarray, target_shape: tuple[int, int]) -> np.ndarray:
+    """
+    将细网格布尔掩膜按整数窗口聚合到目标形状。
+
+    一个目标格网中至少 50% 的子格网为 True 时，聚合结果为 True。
+    """
+    if mask.ndim != 2:
+        raise ValueError(f"mask 必须为二维，得到 {mask.shape}。")
+    if mask.shape == target_shape:
+        return mask
+
+    target_rows, target_cols = target_shape
+    if target_rows <= 0 or target_cols <= 0:
+        raise ValueError(f"目标形状非法：{target_shape}。")
+    if mask.shape[0] % target_rows != 0 or mask.shape[1] % target_cols != 0:
+        raise ValueError(
+            f"无法将形状 {mask.shape} 按整数窗口聚合到 {target_shape}。"
+        )
+
+    row_factor = mask.shape[0] // target_rows
+    col_factor = mask.shape[1] // target_cols
+    if row_factor < 1 or col_factor < 1:
+        raise ValueError(
+            f"只支持从细网格聚合到粗网格，得到 {mask.shape} -> {target_shape}。"
+        )
+
+    fractions = mask.reshape(
+        target_rows, row_factor, target_cols, col_factor
+    ).mean(axis=(1, 3))
+    return fractions >= 0.5
 
 
 def compare_with_reference(generated: np.ndarray, reference_path: Path) -> None:
-    """将生成的海陆分类与原始 GeoTIFF 对比。"""
+    """将生成的海陆分类与原始 GeoTIFF 做诊断性对比。"""
     if not reference_path.exists():
         raise FileNotFoundError(f"参考文件不存在：{reference_path}")
 
@@ -224,56 +252,52 @@ def compare_with_reference(generated: np.ndarray, reference_path: Path) -> None:
     with rasterio.open(reference_path) as ds:
         reference = ds.read(1)
 
-    if reference.shape != generated.shape:
-        raise ValueError(
-            f"参考文件形状 {reference.shape} 与生成结果形状 "
-            f"{generated.shape} 不一致。"
-        )
-
-    generated_land = generated < 100
+    generated_land_fine = generated < 100
+    generated_land = coarsen_boolean_majority(generated_land_fine, reference.shape)
     reference_land = reference < 100
 
     same = int(np.count_nonzero(generated_land == reference_land))
     different = int(np.count_nonzero(generated_land != reference_land))
     generated_only = int(np.count_nonzero(generated_land & ~reference_land))
     reference_only = int(np.count_nonzero(~generated_land & reference_land))
-    agreement = same / generated.size
+    agreement = same / reference.size
 
     print()
     print("与原始文件对比")
     print("--------------")
-    print(f"参考文件               : {reference_path}")
-    print(f"生成结果陆地格网数     : {int(np.count_nonzero(generated_land))}")
-    print(f"参考文件陆地格网数     : {int(np.count_nonzero(reference_land))}")
-    print(f"一致格网数             : {same}")
-    print(f"不一致格网数           : {different}")
-    print(f"仅生成结果判定为陆地   : {generated_only}")
-    print(f"仅参考文件判定为陆地   : {reference_only}")
-    print(f"一致率                 : {agreement:.6f}")
+    print(f"参考文件                         : {reference_path}")
+    print(f"生成结果原始形状                 : {generated.shape}")
+    print(f"参考文件形状                     : {reference.shape}")
+    if generated.shape != reference.shape:
+        print("比较前处理                       : majority 聚合到参考文件形状")
+    print(f"生成结果细网格陆地格网数         : {int(np.count_nonzero(generated_land_fine))}")
+    print(f"生成结果聚合后陆地格网数         : {int(np.count_nonzero(generated_land))}")
+    print(f"参考文件陆地格网数               : {int(np.count_nonzero(reference_land))}")
+    print(f"一致格网数                       : {same}")
+    print(f"不一致格网数                     : {different}")
+    print(f"仅生成结果判定为陆地             : {generated_only}")
+    print(f"仅参考文件判定为陆地             : {reference_only}")
+    print(f"一致率                           : {agreement:.6f}")
 
 
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     """解析命令行参数。"""
     parser = argparse.ArgumentParser(
-        description="使用 global-land-mask 生成 Global_LandMask.tif。陆地=0；海洋=255。"
+        description="使用 global-land-mask 生成 0.1° Global_LandMask.tif。陆地=0；海洋=255。"
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=_OUTPUT_DIR / "Global_LandMask.tif",
-        help="输出 GeoTIFF 路径（默认：GlobalPotential_10km/outputs/Global_LandMask.tif）",
+        help="输出 GeoTIFF 路径（默认：脚本同目录 outputs/Global_LandMask.tif）",
     )
     parser.add_argument(
         "--reference",
         type=Path,
         default=None,
-        help="可选的原始 GeoTIFF，仅用于对比统计。",
+        help="可选原始参考 GeoTIFF。允许使用论文仓库中的 1° 文件，仅用于诊断性对比。",
     )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="覆盖已有输出文件。",
-    )
+    parser.add_argument("--overwrite", action="store_true", help="覆盖已有输出文件。")
     parser.add_argument(
         "--print-stats",
         "--print_stats",
@@ -288,7 +312,7 @@ def main(argv: Iterable[str] | None = None) -> int:
     """命令行入口。"""
     args = parse_args(argv)
 
-    _, _, lat_grid, lon_grid = build_global_1deg_centers()
+    _, _, lat_grid, lon_grid = build_global_0p1deg_centers()
     is_land = get_global_land_mask(lat_grid, lon_grid)
     landmask = build_global_landmask(is_land)
 

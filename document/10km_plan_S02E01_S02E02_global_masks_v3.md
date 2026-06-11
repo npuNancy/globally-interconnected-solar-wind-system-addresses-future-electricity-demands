@@ -5,8 +5,8 @@
 新增两个 Python 文件：
 
 ```text
-S04_Global_fishnet.py
-S05_Global_LandMask.py
+S02E01_Global_fishnet.py
+S02E02_Global_LandMask.py
 ```
 
 两者都使用 Python package：
@@ -27,9 +27,39 @@ pip install global-land-mask rasterio numpy
 
 ---
 
+## 0.1 本版修改：新输出改为全球 0.1° × 0.1° 网格
+
+上传的两个原始 GeoTIFF 仍然是论文仓库中的全球 `1° × 1°` 参考文件。
+本版脚本不再生成 `180 × 360` 网格，而是生成：
+
+```text
+全球 0.1° × 0.1° 网格
+height = 1800
+width  = 3600
+```
+
+经纬度边界保持不变：
+
+```text
+经度：[-180, 180]
+纬度：[-90, 90]
+```
+
+像元中心改为：
+
+```text
+经度中心：-179.95, -179.85, ..., 179.85, 179.95
+纬度中心：  89.95,   89.85, ..., -89.85, -89.95
+```
+
+`0.1°` 在赤道附近约为 `11 km`。由于经线间距随纬度升高而缩短，
+它不是严格等距的 `10 km × 10 km` 投影网格。
+
+---
+
 # 1. 已上传原始 TIF 的参考信息
 
-对原仓库中的两个 1° GeoTIFF 进行检查后，可作为新脚本的参考规格。
+对原仓库中的两个 `1° × 1°` GeoTIFF 进行检查后，可将其作为空间范围、编码约定和下游兼容性的参考。新脚本的目标分辨率为 `0.1° × 0.1°`，因此不会与原始文件具有相同栅格大小。
 
 ## 1.1 原始 `Global_fishnet.tif`
 
@@ -173,15 +203,15 @@ crs = "EPSG:4326"
 
 # 2. 统一空间网格
 
-两个脚本必须使用完全相同的全球 1° 网格。
+两个脚本必须使用完全相同的全球 0.0.1° 网格。
 
 ## 2.1 网格定义
 
 栅格大小：
 
 ```python
-height = 180
-width = 360
+height = 1800
+width = 3600
 ```
 
 像元边界：
@@ -200,8 +230,8 @@ width = 360
 像元中心：
 
 ```python
-lons = np.arange(-179.5, 180.0, 1.0)
-lats = np.arange(89.5, -90.0, -1.0)
+lons = -180.0 + (np.arange(3600, dtype=np.float64) + 0.5) * 0.1
+lats =   90.0 - (np.arange(1800, dtype=np.float64) + 0.5) * 0.1
 ```
 
 注意纬度必须从北向南排列，以匹配 GeoTIFF 的行顺序。
@@ -223,7 +253,7 @@ is_land = globe.is_land(lat_grid, lon_grid)
 `is_land` 的形状必须是：
 
 ```python
-(180, 360)
+(1800, 3600)
 ```
 
 数据类型通常为：
@@ -234,6 +264,15 @@ bool
 
 ## 2.2 GeoTIFF 地理参考
 
+输出数组规模：
+
+| 文件 | 数据类型 | 数组形状 | 未压缩数组约占内存 |
+|---|---|---:|---:|
+| `Global_fishnet.tif` | `uint32` | `1800 × 3600` | `24.7 MiB` |
+| `Global_LandMask.tif` | `uint8` | `1800 × 3600` | `6.2 MiB` |
+
+构造 `lat_grid` 和 `lon_grid` 时会额外占用内存。应避免创建不必要的重复数组。
+
 使用：
 
 ```python
@@ -242,8 +281,8 @@ from rasterio.transform import from_origin
 transform = from_origin(
     west=-180.0,
     north=90.0,
-    xsize=1.0,
-    ysize=1.0,
+    xsize=0.1,
+    ysize=0.1,
 )
 ```
 
@@ -264,7 +303,7 @@ crs
 
 ---
 
-# 3. 文件一：`S04_Global_fishnet.py`
+# 3. 文件一：`S02E01_Global_fishnet.py`
 
 ## 3.1 功能
 
@@ -383,7 +422,7 @@ seed_lat = 72.5
 seed_lon = -40.5
 ```
 
-在 1° 网格中找到最近格点，从该格点开始，仅在：
+在 0.1° 网格中找到最近格点，从该格点开始，仅在：
 
 ```python
 greenland_candidates
@@ -436,7 +475,7 @@ Greenland excluded cells: N
 ## 3.6 建议函数拆分
 
 ```python
-def build_global_1deg_centers() -> tuple[np.ndarray, np.ndarray]:
+def build_global_0p1deg_centers() -> tuple[np.ndarray, np.ndarray]:
     ...
 
 def flood_fill_4_connected(mask: np.ndarray, seed_row: int, seed_col: int) -> np.ndarray:
@@ -472,7 +511,7 @@ def write_geotiff(
 ## 3.7 CLI
 
 ```bash
-python S04_Global_fishnet.py \
+python S02E01_Global_fishnet.py \
   --output Global_fishnet.tif
 ```
 
@@ -506,7 +545,7 @@ invalid fishnet cells after exclusion
 
 ---
 
-# 4. 文件二：`S05_Global_LandMask.py`
+# 4. 文件二：`S02E02_Global_LandMask.py`
 
 ## 4.1 功能
 
@@ -584,20 +623,20 @@ mask_utils.py
 
 ```text
 mask_utils.py
-S04_Global_fishnet.py
-S05_Global_LandMask.py
+S02E01_Global_fishnet.py
+S02E02_Global_LandMask.py
 ```
 
 `mask_utils.py` 中放：
 
 ```python
-build_global_1deg_centers()
+build_global_0p1deg_centers()
 get_global_land_mask()
 write_geotiff()
 print_mask_stats()
 ```
 
-`S04_Global_fishnet.py` 中放：
+`S02E01_Global_fishnet.py` 中放：
 
 ```python
 build_greenland_mask()
@@ -605,7 +644,7 @@ build_antarctica_mask()
 build_global_fishnet()
 ```
 
-`S05_Global_LandMask.py` 中放：
+`S02E02_Global_LandMask.py` 中放：
 
 ```python
 build_global_landmask()
@@ -616,7 +655,7 @@ build_global_landmask()
 ## 4.5 CLI
 
 ```bash
-python S05_Global_LandMask.py \
+python S02E02_Global_LandMask.py \
   --output Global_LandMask.tif
 ```
 
@@ -741,8 +780,8 @@ Global_LandMask.tif
 ## 7.1 两个文件的共同检查
 
 ```python
-assert arr.shape == (180, 360)
-assert transform == from_origin(-180.0, 90.0, 1.0, 1.0)
+assert arr.shape == (1800, 3600)
+assert transform == from_origin(-180.0, 90.0, 0.1, 0.1)
 assert bounds.left == -180.0
 assert bounds.right == 180.0
 assert bounds.bottom == -90.0
@@ -750,7 +789,7 @@ assert bounds.top == 90.0
 assert crs.to_string() == "EPSG:4326"
 ```
 
-## 7.2 `S04_Global_fishnet.py`
+## 7.2 `S02E01_Global_fishnet.py`
 
 ```python
 assert fishnet.dtype == np.uint32
@@ -763,13 +802,13 @@ GeoTIFF：
 
 ```python
 with rasterio.open(output_path) as ds:
-    assert ds.width == 360
-    assert ds.height == 180
+    assert ds.width == 3600
+    assert ds.height == 1800
     assert ds.dtypes[0] == "uint32"
     assert ds.nodata == 65536
 ```
 
-## 7.3 `S05_Global_LandMask.py`
+## 7.3 `S02E02_Global_LandMask.py`
 
 ```python
 assert landmask.dtype == np.uint8
@@ -782,13 +821,25 @@ GeoTIFF：
 
 ```python
 with rasterio.open(output_path) as ds:
-    assert ds.width == 360
-    assert ds.height == 180
+    assert ds.width == 3600
+    assert ds.height == 1800
     assert ds.dtypes[0] == "uint8"
     assert ds.nodata == 255
 ```
 
 ## 7.4 和上传原始文件对比
+
+上传的原始参考文件为 `1° × 1°`，而新脚本输出为 `0.1° × 0.1°`。
+因此不能直接逐像元比较。脚本应先将新生成的布尔分类按 `10 × 10`
+窗口聚合回 `1° × 1°`，再进行诊断性比较。
+
+推荐聚合规则：
+
+```text
+majority：一个 1° 参考格网内，至少 50% 的 0.1° 子格网有效，则聚合后判定为有效
+```
+
+该比较仅用于发现明显异常，不代表新文件必须复刻原始 ArcGIS 结果。
 
 建议脚本可选增加：
 
@@ -799,12 +850,12 @@ with rasterio.open(output_path) as ds:
 例如：
 
 ```bash
-python S04_Global_fishnet.py \
+python S02E01_Global_fishnet.py \
   --output Global_fishnet_global_land_mask.tif \
   --reference Global_fishnet.tif \
   --print_stats
 
-python S05_Global_LandMask.py \
+python S02E02_Global_LandMask.py \
   --output Global_LandMask_global_land_mask.tif \
   --reference Global_LandMask.tif \
   --print_stats
@@ -842,16 +893,16 @@ agreement ratio
 
 ```text
 tests/
-├── test_S04_Global_fishnet.py
-└── test_S05_Global_LandMask.py
+├── test_S02E01_Global_fishnet.py
+└── test_S02E02_Global_LandMask.py
 ```
 
-## 8.1 `test_S04_Global_fishnet.py`
+## 8.1 `test_S02E01_Global_fishnet.py`
 
 覆盖：
 
-1. 网格中心是 `89.5 → -89.5` 和 `-179.5 → 179.5`；
-2. 输出形状为 `(180, 360)`；
+1. 网格中心是 `89.95 → -89.95` 和 `-179.95 → 179.95`；
+2. 输出形状为 `(1800, 3600)`；
 3. 仅存在 `0` 和 `65536`；
 4. 海洋全部为 `65536`；
 5. 南纬 `60°` 以南全部为 `65536`；
@@ -866,11 +917,11 @@ tests/
 9. 默认不覆盖已有文件；
 10. `--overwrite` 可覆盖已有文件。
 
-## 8.2 `test_S05_Global_LandMask.py`
+## 8.2 `test_S02E02_Global_LandMask.py`
 
 覆盖：
 
-1. 输出形状为 `(180, 360)`；
+1. 输出形状为 `(1800, 3600)`；
 2. 仅存在 `0` 和 `255`；
 3. 陆地全部为 `0`；
 4. 海洋全部为 `255`；
@@ -888,16 +939,16 @@ tests/
 实现：
 
 ```python
-build_global_1deg_centers()
+build_global_0p1deg_centers()
 ```
 
 检查：
 
 ```text
-shape = (180, 360)
+shape = (1800, 3600)
 ```
 
-## 第二步：完成 `S05_Global_LandMask.py`
+## 第二步：完成 `S02E02_Global_LandMask.py`
 
 该脚本最简单，只需要：
 
@@ -914,7 +965,7 @@ CRS
 global-land-mask 调用
 ```
 
-## 第三步：完成 `S04_Global_fishnet.py`
+## 第三步：完成 `S02E01_Global_fishnet.py`
 
 在正常海陆掩膜基础上增加：
 
@@ -966,17 +1017,17 @@ landmask 仅包含 0 和 1
 Codex 最终提交：
 
 ```text
-S04_Global_fishnet.py
-S05_Global_LandMask.py
-tests/test_S04_Global_fishnet.py
-tests/test_S05_Global_LandMask.py
+S02E01_Global_fishnet.py
+S02E02_Global_LandMask.py
+tests/test_S02E01_Global_fishnet.py
+tests/test_S02E02_Global_LandMask.py
 README.md
 ```
 
 README 中写明：
 
 1. 使用 `global-land-mask`；
-2. 网格为全球 `1° × 1°`；
+2. 网格为全球 `0.1° × 0.1°`；
 3. `Global_fishnet.tif` 使用 `0 / 65536`；
 4. `Global_fishnet.tif` 排除格陵兰和南极洲；
 5. `Global_LandMask.tif` 使用 `0 / 255`；
@@ -984,3 +1035,19 @@ README 中写明：
 7. 不保证和原 ArcGIS 文件逐像元一致；
 8. 下游 MATLAB 兼容方式；
 9. 两个输出文件统一使用 `[-180, 180]` 经度范围，而不是 `[0, 360]`。
+
+
+---
+
+# 11. 本版相对上一版的修改摘要
+
+1. 目标网格由 `1° × 1°` 改为 `0.1° × 0.1°`；
+2. 输出数组由 `180 × 360` 改为 `1800 × 3600`；
+3. 像元中心改为 `-179.95 ... 179.95` 和 `89.95 ... -89.95`；
+4. GeoTIFF transform 改为 `from_origin(-180.0, 90.0, 0.1, 0.1)`；
+5. 函数名改为 `build_global_0p1deg_centers()`；
+6. 上传的原始 `1° × 1°` TIF 仅作为参考文件；
+7. 与原始参考文件比较时，先按 `10 × 10` majority 规则聚合回 `1° × 1°`；
+8. 代码文件名采用当前项目中的命名：
+   - `S02E01_Global_fishnet.py`
+   - `S02E02_Global_LandMask.py`
